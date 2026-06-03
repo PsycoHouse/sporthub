@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>SportChallenge</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="manifest" href="manifest.json" />
+
+  <meta name="theme-color" content="#111111" />
+</head>
+<body>
+  <h1>SportChallenge</h1>
+
+  <section id="loginBox">
+    <input id="email" type="email" placeholder="E-Mail" />
+    <input id="password" type="password" placeholder="Passwort" />
+    <button id="registerBtn">Registrieren</button>
+    <button id="loginBtn">Einloggen</button>
+  </section>
+
+  <section id="appBox" hidden>
+    <p id="userInfo"></p>
+
+    <h2>Training eintragen</h2>
+    <select id="exercise">
+      <option>Liegestütze</option>
+      <option>Kniebeugen</option>
+      <option>Plank</option>
+      <option>Joggen</option>
+    </select>
+
+    <input id="value" type="number" placeholder="Wert" />
+    <select id="unit">
+      <option>Wiederholungen</option>
+      <option>Sekunden</option>
+      <option>Minuten</option>
+      <option>Kilometer</option>
+    </select>
+
+    <button id="saveWorkoutBtn">Speichern</button>
+
+    <h2>Verlauf</h2>
+    <div id="workoutList"></div>
+
+    <h2>Statistik</h2>
+    <p id="stats"></p>
+
+    <button id="enablePushBtn">Push erlauben</button>
+    <button id="logoutBtn">Ausloggen</button>
+  </section>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
