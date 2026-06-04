@@ -1,7 +1,5 @@
 importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js");
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
 
 firebase.initializeApp({
   apiKey: "AIzaSyBTDz0R8WkY4ov8_28JMpe0jVmSD05oJb4",
@@ -14,12 +12,13 @@ firebase.initializeApp({
   measurementId: "G-BG3SE17BB7"
 });
 
-
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage(payload => {
-  self.registration.showNotification(payload.notification.title, {
-    body: payload.notification.body,
-    icon: "/icons/icon-192.png"
+  const notification = payload.notification || {};
+
+  self.registration.showNotification(notification.title || "SportChallenge", {
+    body: notification.body || "Neue Benachrichtigung",
+    icon: new URL("icons/icon-192.png", self.registration.scope).href
   });
 });
