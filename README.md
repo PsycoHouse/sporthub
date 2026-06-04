@@ -30,12 +30,13 @@ Push verwendet den in `app.js` hinterlegten öffentlichen Web-Push-VAPID-Key (`p
 
 Über das dezente Admin-Symbol im Login kann die Admin-Umgebung gezielt geöffnet werden. Dort können Teams erstellt und registrierte Nutzer mehreren Teams zugeordnet werden. Nutzer erscheinen in der Admin-Liste, sobald sie sich mit der App angemeldet oder bereits Trainings gespeichert haben; die App pflegt dafür Firestore-Dokumente in der Collection `users`.
 
-Die Team-Zuordnung wird in `users/{uid}.teamIds` gespeichert. Neue Trainings speichern zusätzlich die aktuellen `teamIds` des Nutzers. Der Team-Vergleich und die Live-Trainings filtern dadurch auf Personen, die mindestens ein Team mit dem eingeloggten Nutzer teilen.
+Die Team-Zuordnung wird in `users/{uid}.teamIds` gespeichert. Beim Speichern einer Zuordnung erstellt die Admin-Ansicht zusätzlich die gegenseitigen `teamAccess/{viewerUid}_{targetUid}`-Dokumente für alle User-Paare innerhalb jedes Teams. Neue Trainings speichern zusätzlich die aktuellen `teamIds` des Nutzers. Team-Vergleich und Live-Trainings laden zuerst `teamAccess` mit `viewerId == currentUser.uid`, ergänzen die eigene UID und laden anschließend Workouts für genau diese berechtigten User.
 
 Zusätzlich zur bestehenden Collection `workouts` nutzt die App jetzt:
 
 - `users`: E-Mail-Adresse und Team-Zuordnungen der angemeldeten Nutzer
 - `teams`: Teamnamen, die in der Admin-Umgebung verwaltet werden
+- `teamAccess`: Gegenseitige Freigaben für Teammitglieder im Format `{viewerId, targetUserId, teamId, createdAt}`
 
 ## Firestore-Regeln
 
@@ -47,4 +48,4 @@ firebase deploy --only firestore:rules
 
 Admin-Rechte werden über einen der folgenden Wege erkannt: ein Firebase-Custom-Claim `admin: true`, ein Dokument `admins/{uid}` in Firestore oder die Bootstrap-E-Mail-Liste in `app.js`/`firestore.rules`. Die Bootstrap-Liste stellt sicher, dass der erste Admin-Zugang nicht ausgesperrt wird; nach dem Anlegen eines Custom-Claims oder Admin-Dokuments kann sie bei Bedarf wieder reduziert werden.
 
-Angemeldete Nutzer dürfen die Profil-/Team-Metadaten aus `users` lesen, damit Team-Zuordnungen und Namen in der App zuverlässig angezeigt werden. Schreiben dürfen normale Nutzer weiterhin nur ihre eigenen Basisdaten; `teamIds` bleiben Admin-Änderungen vorbehalten. Team-Feed und Team-Vergleich laden ausschließlich Workouts, deren `teamIds` sich mit den im eigenen `users/{uid}.teamIds` gespeicherten Teams überschneiden; die Admin-Ansicht darf alle Teams und – mit Admin-Berechtigung per Claim, Admin-Dokument oder Bootstrap-E-Mail – alle Workouts lesen. Wenn die Admin-Seite nur den aktuellen Admin als Fallback zeigt und in der Konsole `Missing or insufficient permissions` erscheint, sind sehr wahrscheinlich die Firestore-Regeln noch nicht veröffentlicht oder das eingeloggte Konto ist serverseitig nicht als Admin berechtigt.
+Angemeldete Nutzer dürfen die Profil-/Team-Metadaten aus `users` lesen, damit Team-Zuordnungen und Namen in der App zuverlässig angezeigt werden. Schreiben dürfen normale Nutzer weiterhin nur ihre eigenen Basisdaten; `teamIds` bleiben Admin-Änderungen vorbehalten. Team-Feed und Team-Vergleich lesen fremde Workouts ausschließlich über vorhandene `teamAccess/{currentUid}_{targetUid}`-Dokumente; die Admin-Ansicht darf alle Teams und – mit Admin-Berechtigung per Claim, Admin-Dokument oder Bootstrap-E-Mail – alle Workouts lesen. Wenn die Admin-Seite nur den aktuellen Admin als Fallback zeigt und in der Konsole `Missing or insufficient permissions` erscheint, sind sehr wahrscheinlich die Firestore-Regeln noch nicht veröffentlicht oder das eingeloggte Konto ist serverseitig nicht als Admin berechtigt.

@@ -76,6 +76,7 @@ let adminWorkoutUsersCache = [];
 let adminTeamsCache = [];
 let currentUserTeamIds = [];
 let teamAccessTargetUserIds = new Set();
+let hasLoadedTeamAccess = false;
 let workoutFeedInitialized = false;
 const seenWorkoutFeedIds = new Set();
 const PERSONAL_WORKOUT_HISTORY_LIMIT = 5;
@@ -260,14 +261,8 @@ saveTeamAssignmentsBtn.addEventListener("click", async () => {
 
   await runFirebaseAction("Team-Zuordnung speichern", async () => {
     const projectedUsers = getProjectedAdminUsers(userId, teamIds, selectedUser);
-
-    await setDoc(doc(db, "users", userId), {
-      email: selectedUser?.email || "Unbekannter User",
-      teamIds,
-      updatedAt: serverTimestamp()
-    }, { merge: true });
-
-    await synchronizeTeamAccess(projectedUsers);
+    await saveTeamAssignmentAndAccess(userId, teamIds, selectedUser, projectedUsers);
+    setStatus("Team-Zuordnung und gegenseitige Team-Zugriffe wurden gespeichert.");
   });
 });
 
@@ -309,6 +304,7 @@ onAuthStateChanged(auth, async user => {
   usersCache = new Map();
   currentUserTeamIds = [];
   teamAccessTargetUserIds = new Set();
+  hasLoadedTeamAccess = false;
 
   if (isAdminMode) {
     return;
@@ -338,6 +334,7 @@ onAuthStateChanged(auth, async user => {
     workoutHistoryCache = [];
     comparisonWorkoutsCache = [];
     teamAccessTargetUserIds = new Set();
+    hasLoadedTeamAccess = false;
     stats.textContent = "";
     renderWorkoutTicker([]);
     renderStats();
@@ -470,6 +467,7 @@ function cleanupRegularSubscriptions() {
     unsubscribeTeamAccess();
     unsubscribeTeamAccess = null;
   }
+  hasLoadedTeamAccess = false;
   if (unsubscribeUsers) {
     unsubscribeUsers();
     unsubscribeUsers = null;
@@ -539,21 +537,8 @@ function seedCurrentAdminUserFallback() {
   syncAdminUsersCache();
 }
 
-
-function getProjectedAdminUsers(updatedUserId, teamIds, selectedUser) {
-  const usersById = new Map(adminUsersCache.map(user => [user.id, user]));
-  usersById.set(updatedUserId, {
-    id: updatedUserId,
-    email: selectedUser?.email || "Unbekannter User",
-    teamIds
-  });
-  return Array.from(usersById.values());
-}
-
-async function synchronizeTeamAccess(projectedUsers = adminUsersCache) {
-  const desiredAccess = buildDesiredTeamAccess(projectedUsers);
-  const existingAccess = await getDocs(collection(db, "teamAccess"));
-  const existingAccessById = new Map();
+async function saveTeamAssignmentAndAccess(updatedUserId, teamIds, selectedUser, projectedUsers) {
+  const accessOperations = await buildTeamAccessSynchronizationOperations(projectedUsers);
   const batches = [];
   let batch = writeBatch(db);
   let operations = 0;
@@ -569,11 +554,46 @@ async function synchronizeTeamAccess(projectedUsers = adminUsersCache) {
     }
   }
 
+  queue(currentBatch => currentBatch.set(
+    doc(db, "users", updatedUserId),
+    {
+      email: selectedUser?.email || "Unbekannter User",
+      teamIds,
+      updatedAt: serverTimestamp()
+    },
+    { merge: true }
+  ));
+
+  accessOperations.forEach(queue);
+
+  if (operations > 0) {
+    batches.push(batch);
+  }
+
+  await Promise.all(batches.map(currentBatch => currentBatch.commit()));
+}
+
+function getProjectedAdminUsers(updatedUserId, teamIds, selectedUser) {
+  const usersById = new Map(adminUsersCache.map(user => [user.id, user]));
+  usersById.set(updatedUserId, {
+    id: updatedUserId,
+    email: selectedUser?.email || "Unbekannter User",
+    teamIds
+  });
+  return Array.from(usersById.values());
+}
+
+async function buildTeamAccessSynchronizationOperations(projectedUsers = adminUsersCache) {
+  const desiredAccess = buildDesiredTeamAccess(projectedUsers);
+  const existingAccess = await getDocs(collection(db, "teamAccess"));
+  const existingAccessById = new Map();
+  const operations = [];
+
   existingAccess.forEach(accessDoc => {
     existingAccessById.set(accessDoc.id, accessDoc.data());
 
     if (!desiredAccess.has(accessDoc.id)) {
-      queue(currentBatch => currentBatch.delete(accessDoc.ref));
+      operations.push(currentBatch => currentBatch.delete(accessDoc.ref));
     }
   });
 
@@ -585,15 +605,11 @@ async function synchronizeTeamAccess(projectedUsers = adminUsersCache) {
       || existingData.teamId !== data.teamId;
 
     if (accessChanged) {
-      queue(currentBatch => currentBatch.set(doc(db, "teamAccess", accessId), data, { merge: true }));
+      operations.push(currentBatch => currentBatch.set(doc(db, "teamAccess", accessId), data, { merge: true }));
     }
   });
 
-  if (operations > 0) {
-    batches.push(batch);
-  }
-
-  await Promise.all(batches.map(currentBatch => currentBatch.commit()));
+  return operations;
 }
 
 function buildDesiredTeamAccess(users) {
@@ -650,6 +666,8 @@ function loadUsersForTeamVisibility() {
 
 
 function loadTeamAccess(userId) {
+  hasLoadedTeamAccess = false;
+
   if (unsubscribeTeamAccess) {
     unsubscribeTeamAccess();
     unsubscribeTeamAccess = null;
@@ -670,7 +688,11 @@ function loadTeamAccess(userId) {
       }
     });
 
-    if (!setsHaveSameValues(teamAccessTargetUserIds, nextTargetUserIds)) {
+    const accessChanged = !setsHaveSameValues(teamAccessTargetUserIds, nextTargetUserIds);
+    const wasWaitingForTeamAccess = !hasLoadedTeamAccess;
+    hasLoadedTeamAccess = true;
+
+    if (accessChanged || wasWaitingForTeamAccess) {
       teamAccessTargetUserIds = nextTargetUserIds;
       restartTeamWorkoutSubscriptions();
       return;
@@ -1306,6 +1328,13 @@ function loadWorkouts() {
 }
 
 function loadComparisonWorkouts() {
+  if (!hasLoadedTeamAccess) {
+    comparisonWorkoutsCache = [];
+    comparisonSummary.textContent = "Der Team-Vergleich wird geladen ...";
+    comparisonList.innerHTML = `<div class="emptyState">Team-Zugriffe werden geprüft ...</div>`;
+    return;
+  }
+
   const comparisonUserIds = getAuthorizedComparisonUserIds();
 
   if (comparisonUserIds.length === 0) {
@@ -1330,7 +1359,10 @@ function getAuthorizedComparisonUserIds() {
     return [];
   }
 
-  return Array.from(new Set([currentUser.uid, ...teamAccessTargetUserIds]));
+  return Array.from(new Set([
+    currentUser.uid,
+    ...teamAccessTargetUserIds
+  ]));
 }
 
 function getVisibleTeamWorkouts(workouts) {
