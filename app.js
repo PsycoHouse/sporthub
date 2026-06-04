@@ -47,6 +47,7 @@ let messagingServiceWorkerRegistration = null;
 
 let currentUser = null;
 let unsubscribeWorkouts = null;
+let workoutsCache = [];
 
 const loginBox = document.getElementById("loginBox");
 const appBox = document.getElementById("appBox");
@@ -63,6 +64,13 @@ const unitInput = document.getElementById("unit");
 const saveWorkoutBtn = document.getElementById("saveWorkoutBtn");
 const workoutList = document.getElementById("workoutList");
 const stats = document.getElementById("stats");
+const statsRange = document.getElementById("statsRange");
+const customRange = document.getElementById("customRange");
+const statsFrom = document.getElementById("statsFrom");
+const statsTo = document.getElementById("statsTo");
+const radarChart = document.getElementById("radarChart");
+const radarSummary = document.getElementById("radarSummary");
+const radarLegend = document.getElementById("radarLegend");
 const enablePushBtn = document.getElementById("enablePushBtn");
 
 setStatus(`Firebase initialisiert: ${firebaseConfig.projectId}`);
@@ -111,10 +119,20 @@ onAuthStateChanged(auth, user => {
     loginBox.hidden = false;
     appBox.hidden = true;
     workoutList.innerHTML = "";
+    workoutsCache = [];
     stats.textContent = "";
+    renderStats();
     setStatus("Nicht eingeloggt. Firebase ist initialisiert.");
   }
 });
+
+statsRange.addEventListener("change", () => {
+  customRange.hidden = statsRange.value !== "custom";
+  renderStats();
+});
+
+statsFrom.addEventListener("change", renderStats);
+statsTo.addEventListener("change", renderStats);
 
 saveWorkoutBtn.addEventListener("click", async () => {
   if (!currentUser) {
@@ -148,48 +166,296 @@ function loadWorkouts() {
   );
 
   unsubscribeWorkouts = onSnapshot(q, snapshot => {
+    workoutsCache = [];
     workoutList.innerHTML = "";
-
-    let total = 0;
-    let count = 0;
 
     snapshot.forEach(doc => {
       const data = doc.data();
-
-      const item = document.createElement("div");
-      item.className = "workoutItem";
-
-      const icon = document.createElement("span");
-      icon.className = "workoutIcon";
-      icon.textContent = getExerciseIcon(data.exercise);
-
-      const content = document.createElement("span");
-
-      const name = document.createElement("span");
-      name.className = "workoutName";
-      name.textContent = data.exercise;
-
-      const meta = document.createElement("span");
-      meta.className = "workoutMeta";
-      meta.textContent = `${data.value} ${data.unit}`;
-
-      content.append(name, meta);
-      item.append(icon, content);
-      workoutList.appendChild(item);
-
-      total += data.value || 0;
-      count++;
+      workoutsCache.push({
+        id: doc.id,
+        exercise: data.exercise,
+        value: Number(data.value) || 0,
+        unit: data.unit,
+        createdAt: getWorkoutDate(data.createdAt)
+      });
     });
 
-    if (count === 0) {
-      workoutList.innerHTML = `<div class="emptyState">Noch keine Trainings gespeichert. Trag dein erstes Workout ein!</div>`;
-    }
-
-    stats.textContent = `Einträge: ${count} · Gesamtwert: ${total}`;
-    setStatus(`Firestore verbunden. ${count} Trainingseinträge geladen.`);
+    renderWorkoutList(workoutsCache);
+    renderStats();
+    setStatus(`Firestore verbunden. ${workoutsCache.length} Trainingseinträge geladen.`);
   }, error => {
     showFirebaseError("Firestore laden", error);
   });
+}
+
+function renderWorkoutList(workouts) {
+  workoutList.innerHTML = "";
+
+  workouts.forEach(workout => {
+    const item = document.createElement("div");
+    item.className = "workoutItem";
+
+    const icon = document.createElement("span");
+    icon.className = "workoutIcon";
+    icon.textContent = getExerciseIcon(workout.exercise);
+
+    const content = document.createElement("span");
+
+    const name = document.createElement("span");
+    name.className = "workoutName";
+    name.textContent = workout.exercise;
+
+    const meta = document.createElement("span");
+    meta.className = "workoutMeta";
+    meta.textContent = `${workout.value} ${workout.unit} · ${formatWorkoutDate(workout.createdAt)}`;
+
+    content.append(name, meta);
+    item.append(icon, content);
+    workoutList.appendChild(item);
+  });
+
+  if (workouts.length === 0) {
+    workoutList.innerHTML = `<div class="emptyState">Noch keine Trainings gespeichert. Trag dein erstes Workout ein!</div>`;
+  }
+}
+
+function renderStats() {
+  const range = getSelectedStatsRange();
+  const filteredWorkouts = workoutsCache.filter(workout => isWorkoutInRange(workout, range));
+  const total = filteredWorkouts.reduce((sum, workout) => sum + workout.value, 0);
+  const exerciseTotals = getExerciseTotals(filteredWorkouts);
+
+  stats.textContent = `Zeitraum: ${range.label} · Einträge: ${filteredWorkouts.length} · Gesamtwert: ${formatNumber(total)}`;
+  renderRadarChart(exerciseTotals, filteredWorkouts.length, range.label);
+}
+
+function getSelectedStatsRange() {
+  const now = new Date();
+  const today = startOfDay(now);
+  const value = statsRange.value;
+
+  if (value === "week") {
+    const start = startOfWeek(today);
+    return { label: "Diese Woche", start, end: endOfDay(now) };
+  }
+
+  if (value === "last7") {
+    return { label: "Letzte 7 Tage", start: addDays(today, -6), end: endOfDay(now) };
+  }
+
+  if (value === "month") {
+    return { label: "Dieser Monat", start: new Date(now.getFullYear(), now.getMonth(), 1), end: endOfDay(now) };
+  }
+
+  if (value === "last30") {
+    return { label: "Letzte 30 Tage", start: addDays(today, -29), end: endOfDay(now) };
+  }
+
+  if (value === "custom") {
+    const start = statsFrom.value ? startOfDay(new Date(statsFrom.value)) : null;
+    const end = statsTo.value ? endOfDay(new Date(statsTo.value)) : null;
+    return { label: getCustomRangeLabel(start, end), start, end };
+  }
+
+  return { label: "Alles", start: null, end: null };
+}
+
+function isWorkoutInRange(workout, range) {
+  if (!workout.createdAt) {
+    return range.start === null && range.end === null;
+  }
+
+  if (range.start && workout.createdAt < range.start) {
+    return false;
+  }
+
+  if (range.end && workout.createdAt > range.end) {
+    return false;
+  }
+
+  return true;
+}
+
+function renderRadarChart(exerciseTotals, entryCount, rangeLabel) {
+  const entries = Object.entries(exerciseTotals);
+  const maxValue = Math.max(...entries.map(([, value]) => value), 1);
+  const center = 120;
+  const maxRadius = 78;
+  const levels = [0.25, 0.5, 0.75, 1];
+
+  radarChart.replaceChildren();
+  radarLegend.replaceChildren();
+
+  levels.forEach(level => {
+    radarChart.appendChild(createSvgElement("polygon", {
+      points: getRadarPoints(entries.length, center, maxRadius * level),
+      class: "radarGrid"
+    }));
+  });
+
+  entries.forEach(([exercise], index) => {
+    const outerPoint = getRadarPoint(index, entries.length, center, maxRadius);
+    const labelPoint = getRadarPoint(index, entries.length, center, maxRadius + 24);
+
+    radarChart.appendChild(createSvgElement("line", {
+      x1: center,
+      y1: center,
+      x2: outerPoint.x,
+      y2: outerPoint.y,
+      class: "radarAxis"
+    }));
+
+    const label = createSvgElement("text", {
+      x: labelPoint.x,
+      y: labelPoint.y,
+      class: "radarLabel",
+      "text-anchor": labelPoint.x < center - 8 ? "end" : labelPoint.x > center + 8 ? "start" : "middle"
+    });
+    label.textContent = exercise;
+    radarChart.appendChild(label);
+  });
+
+  if (entryCount > 0) {
+    const dataPoints = entries.map(([, value], index) => {
+      const radius = (value / maxValue) * maxRadius;
+      const point = getRadarPoint(index, entries.length, center, radius);
+      return `${point.x},${point.y}`;
+    }).join(" ");
+
+    radarChart.appendChild(createSvgElement("polygon", {
+      points: dataPoints,
+      class: "radarArea"
+    }));
+
+    entries.forEach(([, value], index) => {
+      const radius = (value / maxValue) * maxRadius;
+      const point = getRadarPoint(index, entries.length, center, radius);
+      radarChart.appendChild(createSvgElement("circle", {
+        cx: point.x,
+        cy: point.y,
+        r: 4,
+        class: "radarDot"
+      }));
+    });
+  }
+
+  entries.forEach(([exercise, value]) => {
+    const item = document.createElement("span");
+    item.textContent = `${getExerciseIcon(exercise)} ${exercise}: ${formatNumber(value)}`;
+    radarLegend.appendChild(item);
+  });
+
+  radarSummary.textContent = entryCount === 0
+    ? `Keine Daten für ${rangeLabel}.`
+    : `${entryCount} Einträge im Zeitraum ${rangeLabel}. Höchster Übungswert: ${formatNumber(maxValue)}.`;
+}
+
+function getExerciseTotals(workouts) {
+  const totals = {
+    "Liegestütze": 0,
+    "Kniebeugen": 0,
+    "Plank": 0,
+    "Joggen": 0
+  };
+
+  workouts.forEach(workout => {
+    totals[workout.exercise] = (totals[workout.exercise] || 0) + workout.value;
+  });
+
+  return totals;
+}
+
+function getRadarPoints(count, center, radius) {
+  return Array.from({ length: count }, (_, index) => {
+    const point = getRadarPoint(index, count, center, radius);
+    return `${point.x},${point.y}`;
+  }).join(" ");
+}
+
+function getRadarPoint(index, count, center, radius) {
+  const angle = -Math.PI / 2 + (index * 2 * Math.PI) / count;
+  return {
+    x: Number((center + Math.cos(angle) * radius).toFixed(2)),
+    y: Number((center + Math.sin(angle) * radius).toFixed(2))
+  };
+}
+
+function createSvgElement(name, attributes) {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", name);
+
+  Object.entries(attributes).forEach(([key, value]) => {
+    element.setAttribute(key, value);
+  });
+
+  return element;
+}
+
+function getWorkoutDate(createdAt) {
+  if (!createdAt) {
+    return null;
+  }
+
+  if (typeof createdAt.toDate === "function") {
+    return createdAt.toDate();
+  }
+
+  const date = new Date(createdAt);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function startOfWeek(date) {
+  const start = startOfDay(date);
+  const day = start.getDay() || 7;
+  start.setDate(start.getDate() - day + 1);
+  return start;
+}
+
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function endOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+}
+
+function addDays(date, amount) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + amount);
+  return result;
+}
+
+function getCustomRangeLabel(start, end) {
+  if (start && end) {
+    return `${formatWorkoutDate(start)} bis ${formatWorkoutDate(end)}`;
+  }
+
+  if (start) {
+    return `Ab ${formatWorkoutDate(start)}`;
+  }
+
+  if (end) {
+    return `Bis ${formatWorkoutDate(end)}`;
+  }
+
+  return "Variabler Zeitraum";
+}
+
+function formatWorkoutDate(date) {
+  if (!date) {
+    return "Datum offen";
+  }
+
+  return new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  }).format(date);
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat("de-DE", {
+    maximumFractionDigits: 1
+  }).format(value);
 }
 
 enablePushBtn.addEventListener("click", async () => {

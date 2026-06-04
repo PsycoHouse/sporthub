@@ -91,7 +91,36 @@
               <p class="eyebrow">Fortschritt</p>
               <h2 id="statsTitle">Statistik</h2>
             </div>
+            <div class="statsControls" aria-label="Statistik Zeitraum">
+              <label for="statsRange">Zeitraum</label>
+              <select id="statsRange">
+                <option value="week">Diese Woche</option>
+                <option value="last7">Letzte 7 Tage</option>
+                <option value="month">Dieser Monat</option>
+                <option value="last30">Letzte 30 Tage</option>
+                <option value="all">Alles</option>
+                <option value="custom">Variabel</option>
+              </select>
+              <div id="customRange" class="customRange" hidden>
+                <div class="fieldGroup">
+                  <label for="statsFrom">Von</label>
+                  <input id="statsFrom" type="date" />
+                </div>
+                <div class="fieldGroup">
+                  <label for="statsTo">Bis</label>
+                  <input id="statsTo" type="date" />
+                </div>
+              </div>
+            </div>
             <p id="stats" class="statsValue"></p>
+            <div class="radarPanel" aria-labelledby="radarTitle">
+              <div class="radarHeader">
+                <h3 id="radarTitle">Spinnendiagramm</h3>
+                <p id="radarSummary" class="radarSummary">Noch keine Daten im gewählten Zeitraum.</p>
+              </div>
+              <svg id="radarChart" class="radarChart" viewBox="0 0 240 240" role="img" aria-labelledby="radarTitle radarSummary"></svg>
+              <div id="radarLegend" class="radarLegend"></div>
+            </div>
             <button id="enablePushBtn" class="secondaryBtn">Push erlauben</button>
           </aside>
         </section>
