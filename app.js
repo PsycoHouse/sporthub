@@ -93,6 +93,8 @@ const exerciseCatalog = [
   { name: "Sit-ups", unit: "Wiederholungen", icon: "🧱" },
   { name: "Crunches", unit: "Wiederholungen", icon: "🔁" },
   { name: "Ausfallschritte", unit: "Wiederholungen", icon: "🦵" },
+  { name: "Step-Ups", unit: "Wiederholungen", icon: "🪜" },
+  { name: "Bulgarian Split Squats", unit: "Wiederholungen", icon: "🦵" },
   { name: "Mountain Climbers", unit: "Wiederholungen", icon: "⛰️" },
   { name: "Jumping Jacks", unit: "Wiederholungen", icon: "⭐" },
   { name: "Klimmzüge", unit: "Wiederholungen", icon: "🧗" },
