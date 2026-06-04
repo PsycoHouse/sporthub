@@ -211,11 +211,7 @@ enablePushBtn.addEventListener("click", async () => {
       throw new Error("Bitte zuerst den öffentlichen Web-Push-VAPID-Key in app.js eintragen.");
     }
 
-    const messaging = getMessaging(app);
-
-    const token = await getToken(messaging, {
-      vapidKey: publicVapidKey
-    });
+   const messaging
 
     console.log("Push Token:", token);
 
