@@ -57,7 +57,7 @@ let comparisonWorkoutsCache = [];
 let workoutFeedInitialized = false;
 const seenWorkoutFeedIds = new Set();
 const PERSONAL_WORKOUT_HISTORY_LIMIT = 25;
-const TEAM_WORKOUT_FEED_LIMIT = 12;
+const TEAM_WORKOUT_FEED_LIMIT = 5;
 const FAVORITE_EXERCISES_STORAGE_KEY = "sporthubFavoriteExercises";
 
 const exerciseCatalog = [
@@ -387,7 +387,7 @@ function renderWorkoutTicker(workouts) {
     return;
   }
 
-  workouts.forEach(workout => {
+  workouts.slice(0, TEAM_WORKOUT_FEED_LIMIT).forEach(workout => {
     const item = document.createElement("li");
     item.className = "tickerItem";
 
