@@ -28,7 +28,7 @@ Push verwendet den in `app.js` hinterlegten öffentlichen Web-Push-VAPID-Key (`p
 
 ## Admin-Umgebung und Teams
 
-Die Firebase-Auth-E-Mail `adrian.arab@hotmail.de` ist als Admin hinterlegt. Wenn sich dieser Nutzer mit seinem normalen Firebase-Passwort anmeldet, wird ausschließlich die Admin-Umgebung geöffnet; die normale Trainings-App wird für diesen Account nicht geladen. Der ältere Sonder-Login `admin` mit Passwort `102938` bleibt als lokaler Fallback bestehen, benötigt aber passende Firestore-Regeln, weil er nicht über Firebase Authentication authentifiziert ist. In der Admin-Umgebung können Teams erstellt und registrierte Nutzer mehreren Teams zugeordnet werden. Nutzer erscheinen in der Admin-Liste, sobald sie sich mit der App angemeldet oder bereits Trainings gespeichert haben; die App pflegt dafür Firestore-Dokumente in der Collection `users`.
+Über das dezente Admin-Symbol im Login kann die Admin-Umgebung gezielt geöffnet werden. Dort können Teams erstellt und registrierte Nutzer mehreren Teams zugeordnet werden. Nutzer erscheinen in der Admin-Liste, sobald sie sich mit der App angemeldet oder bereits Trainings gespeichert haben; die App pflegt dafür Firestore-Dokumente in der Collection `users`.
 
 Die Team-Zuordnung wird in `users/{uid}.teamIds` gespeichert. Neue Trainings speichern zusätzlich die aktuellen `teamIds` des Nutzers. Der Team-Vergleich und die Live-Trainings filtern dadurch auf Personen, die mindestens ein Team mit dem eingeloggten Nutzer teilen.
 
