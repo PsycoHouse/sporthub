@@ -8,49 +8,108 @@
   <link rel="stylesheet" href="style.css" />
   <link rel="manifest" href="manifest.json" />
 
-  <meta name="theme-color" content="#111111" />
+  <meta name="theme-color" content="#0f172a" />
 </head>
 <body>
-  <h1>SportChallenge</h1>
-  <p id="statusMessage" class="status" role="status">Firebase wird initialisiert ...</p>
+  <main class="appShell">
+    <section class="heroPanel" aria-labelledby="pageTitle">
+      <div class="brandMark" aria-hidden="true">SC</div>
+      <p class="eyebrow">Dein persönlicher Trainingshub</p>
+      <h1 id="pageTitle">SportChallenge</h1>
+      <p class="heroText">Tracke Workouts, bleib im Rhythmus und sieh deinen Fortschritt auf einen Blick.</p>
+      <div class="heroStats" aria-label="App Vorteile">
+        <span>Live Verlauf</span>
+        <span>Firebase Sync</span>
+        <span>Push Ready</span>
+      </div>
+    </section>
 
-  <section id="loginBox">
-    <input id="email" type="email" placeholder="E-Mail" />
-    <input id="password" type="password" placeholder="Passwort" />
-    <button id="registerBtn">Registrieren</button>
-    <button id="loginBtn">Einloggen</button>
-  </section>
+    <section class="contentPanel" aria-label="SportChallenge App">
+      <p id="statusMessage" class="status" role="status">Firebase wird initialisiert ...</p>
 
-  <section id="appBox" hidden>
-    <p id="userInfo"></p>
+      <section id="loginBox" class="card authCard" aria-labelledby="loginTitle">
+        <div class="sectionHeader">
+          <p class="eyebrow">Willkommen zurück</p>
+          <h2 id="loginTitle">Einloggen oder starten</h2>
+        </div>
+        <label for="email">E-Mail</label>
+        <input id="email" type="email" placeholder="name@example.com" autocomplete="email" />
+        <label for="password">Passwort</label>
+        <input id="password" type="password" placeholder="Mindestens 6 Zeichen" autocomplete="current-password" />
+        <div class="buttonRow">
+          <button id="loginBtn" class="primaryBtn">Einloggen</button>
+          <button id="registerBtn" class="secondaryBtn">Registrieren</button>
+        </div>
+      </section>
 
-    <h2>Training eintragen</h2>
-    <select id="exercise">
-      <option>Liegestütze</option>
-      <option>Kniebeugen</option>
-      <option>Plank</option>
-      <option>Joggen</option>
-    </select>
+      <section id="appBox" class="dashboard" hidden>
+        <div class="dashboardTop card">
+          <div>
+            <p class="eyebrow">Aktive Session</p>
+            <p id="userInfo" class="userInfo"></p>
+          </div>
+          <button id="logoutBtn" class="ghostBtn">Ausloggen</button>
+        </div>
 
-    <input id="value" type="number" placeholder="Wert" />
-    <select id="unit">
-      <option>Wiederholungen</option>
-      <option>Sekunden</option>
-      <option>Minuten</option>
-      <option>Kilometer</option>
-    </select>
+        <section class="card formCard" aria-labelledby="workoutTitle">
+          <div class="sectionHeader">
+            <p class="eyebrow">Heute erledigt?</p>
+            <h2 id="workoutTitle">Training eintragen</h2>
+          </div>
 
-    <button id="saveWorkoutBtn">Speichern</button>
+          <div class="formGrid">
+            <div class="fieldGroup fullWidth">
+              <label for="exercise">Übung</label>
+              <select id="exercise">
+                <option>Liegestütze</option>
+                <option>Kniebeugen</option>
+                <option>Plank</option>
+                <option>Joggen</option>
+              </select>
+            </div>
 
-    <h2>Verlauf</h2>
-    <div id="workoutList"></div>
+            <div class="fieldGroup">
+              <label for="value">Wert</label>
+              <input id="value" type="number" placeholder="z. B. 25" min="0" />
+            </div>
 
-    <h2>Statistik</h2>
-    <p id="stats"></p>
+            <div class="fieldGroup">
+              <label for="unit">Einheit</label>
+              <select id="unit">
+                <option>Wiederholungen</option>
+                <option>Sekunden</option>
+                <option>Minuten</option>
+                <option>Kilometer</option>
+              </select>
+            </div>
+          </div>
 
-    <button id="enablePushBtn">Push erlauben</button>
-    <button id="logoutBtn">Ausloggen</button>
-  </section>
+          <button id="saveWorkoutBtn" class="primaryBtn">Training speichern</button>
+        </section>
+
+        <section class="dashboardGrid">
+          <section class="card" aria-labelledby="historyTitle">
+            <div class="sectionHeader inlineHeader">
+              <div>
+                <p class="eyebrow">Timeline</p>
+                <h2 id="historyTitle">Verlauf</h2>
+              </div>
+            </div>
+            <div id="workoutList" class="workoutList"></div>
+          </section>
+
+          <aside class="card statsCard" aria-labelledby="statsTitle">
+            <div class="sectionHeader">
+              <p class="eyebrow">Fortschritt</p>
+              <h2 id="statsTitle">Statistik</h2>
+            </div>
+            <p id="stats" class="statsValue"></p>
+            <button id="enablePushBtn" class="secondaryBtn">Push erlauben</button>
+          </aside>
+        </section>
+      </section>
+    </section>
+  </main>
 
   <script type="module" src="app.js"></script>
 </body>

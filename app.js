@@ -154,15 +154,34 @@ function loadWorkouts() {
 
       const item = document.createElement("div");
       item.className = "workoutItem";
-      item.textContent = `${data.exercise}: ${data.value} ${data.unit}`;
 
+      const icon = document.createElement("span");
+      icon.className = "workoutIcon";
+      icon.textContent = getExerciseIcon(data.exercise);
+
+      const content = document.createElement("span");
+
+      const name = document.createElement("span");
+      name.className = "workoutName";
+      name.textContent = data.exercise;
+
+      const meta = document.createElement("span");
+      meta.className = "workoutMeta";
+      meta.textContent = `${data.value} ${data.unit}`;
+
+      content.append(name, meta);
+      item.append(icon, content);
       workoutList.appendChild(item);
 
       total += data.value || 0;
       count++;
     });
 
-    stats.textContent = `Einträge: ${count} | Gesamtwert: ${total}`;
+    if (count === 0) {
+      workoutList.innerHTML = `<div class="emptyState">Noch keine Trainings gespeichert. Trag dein erstes Workout ein!</div>`;
+    }
+
+    stats.textContent = `Einträge: ${count} · Gesamtwert: ${total}`;
     setStatus(`Firestore verbunden. ${count} Trainingseinträge geladen.`);
   }, error => {
     showFirebaseError("Firestore laden", error);
@@ -222,6 +241,17 @@ async function runFirebaseAction(label, action) {
 function showFirebaseError(label, error) {
   console.error(`${label} fehlgeschlagen:`, error);
   setStatus(`${label} fehlgeschlagen: ${getReadableFirebaseError(error)}`, true);
+}
+
+function getExerciseIcon(exercise) {
+  const icons = {
+    "Liegestütze": "💪",
+    "Kniebeugen": "⚡",
+    "Plank": "🔥",
+    "Joggen": "🏃"
+  };
+
+  return icons[exercise] || "✓";
 }
 
 function getReadableFirebaseError(error) {
