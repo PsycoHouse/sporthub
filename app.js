@@ -214,7 +214,7 @@ enablePushBtn.addEventListener("click", async () => {
     const messaging = getMessaging(app);
 
     const token = await getToken(messaging, {
-      vapidKey: "BAJnLi82GWDVung5VjlEqcNOg7V5N2EFblgVi4B8x7g9IuKcHlKEE3-Kfm45B1xs_fowyVlD_Fow5h_3o5f9xWE"
+      vapidKey: "BJedoQzwYnHdUMlK7HW7Zabu64927HoibICRtwKD0xjoTadWCk7AMM7IDu9X1cBY5oqm3L5rUWrKEIcol0QdRPE"
     });
 
     console.log("Push Token:", token);
