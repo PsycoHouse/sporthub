@@ -56,8 +56,8 @@ let workoutsCache = [];
 let comparisonWorkoutsCache = [];
 let workoutFeedInitialized = false;
 const seenWorkoutFeedIds = new Set();
-const PERSONAL_WORKOUT_HISTORY_LIMIT = 25;
-const TEAM_WORKOUT_FEED_LIMIT = 5;
+const PERSONAL_WORKOUT_HISTORY_LIMIT = 5;
+const TEAM_WORKOUT_FEED_LIMIT = 3;
 const FAVORITE_EXERCISES_STORAGE_KEY = "sporthubFavoriteExercises";
 
 const exerciseCatalog = [
