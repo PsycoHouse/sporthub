@@ -68,10 +68,11 @@ service cloud.firestore {
     // USERS
     // =========================
     match /users/{userId} {
-      // Signed-in users may read lightweight profile/team metadata so team
-      // assignment UIs and shared-team labels can resolve user names.
+      // Team metadata is stored on users/{uid}. A user may read another
+      // user's team data only as an admin or through an explicit
+      // teamAccess/{currentUid}_{targetUid} grant.
       // Writes to teamIds remain admin-only below.
-      allow read: if signedIn();
+      allow read: if isOwner(userId) || isAdmin() || hasTeamAccess(userId);
 
       allow create: if isAdmin()
                     || (
