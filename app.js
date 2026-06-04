@@ -17,6 +17,7 @@ import {
   getDoc,
   getDocs,
   setDoc,
+  writeBatch,
   query,
   where,
   orderBy,
@@ -60,6 +61,7 @@ let unsubscribeWorkouts = null;
 let unsubscribeWorkoutFeed = null;
 let unsubscribeComparisonWorkouts = null;
 let unsubscribeCurrentUserProfile = null;
+let unsubscribeTeamAccess = null;
 let unsubscribeUsers = null;
 let unsubscribeAdminUsers = null;
 let unsubscribeAdminTeams = null;
@@ -73,6 +75,7 @@ let adminProfileUsersCache = [];
 let adminWorkoutUsersCache = [];
 let adminTeamsCache = [];
 let currentUserTeamIds = [];
+let teamAccessTargetUserIds = new Set();
 let workoutFeedInitialized = false;
 const seenWorkoutFeedIds = new Set();
 const PERSONAL_WORKOUT_HISTORY_LIMIT = 5;
@@ -254,11 +257,15 @@ saveTeamAssignmentsBtn.addEventListener("click", async () => {
   const selectedUser = adminUsersCache.find(user => user.id === userId);
 
   await runFirebaseAction("Team-Zuordnung speichern", async () => {
+    const projectedUsers = getProjectedAdminUsers(userId, teamIds, selectedUser);
+
     await setDoc(doc(db, "users", userId), {
       email: selectedUser?.email || "Unbekannter User",
       teamIds,
       updatedAt: serverTimestamp()
     }, { merge: true });
+
+    await synchronizeTeamAccess(projectedUsers);
   });
 });
 
@@ -285,6 +292,11 @@ onAuthStateChanged(auth, async user => {
     unsubscribeCurrentUserProfile = null;
   }
 
+  if (unsubscribeTeamAccess) {
+    unsubscribeTeamAccess();
+    unsubscribeTeamAccess = null;
+  }
+
   if (unsubscribeUsers) {
     unsubscribeUsers();
     unsubscribeUsers = null;
@@ -294,6 +306,7 @@ onAuthStateChanged(auth, async user => {
   seenWorkoutFeedIds.clear();
   usersCache = new Map();
   currentUserTeamIds = [];
+  teamAccessTargetUserIds = new Set();
 
   if (isAdminMode) {
     return;
@@ -312,6 +325,7 @@ onAuthStateChanged(auth, async user => {
     setStatus("Firebase Auth verbunden. Lade Firestore-Daten ...");
     await ensureUserProfile(user);
     loadCurrentUserProfile(user.uid);
+    loadTeamAccess(user.uid);
     loadWorkouts();
   } else {
     loginBox.hidden = false;
@@ -321,6 +335,7 @@ onAuthStateChanged(auth, async user => {
     workoutsCache = [];
     workoutHistoryCache = [];
     comparisonWorkoutsCache = [];
+    teamAccessTargetUserIds = new Set();
     stats.textContent = "";
     renderWorkoutTicker([]);
     renderStats();
@@ -449,6 +464,10 @@ function cleanupRegularSubscriptions() {
     unsubscribeCurrentUserProfile();
     unsubscribeCurrentUserProfile = null;
   }
+  if (unsubscribeTeamAccess) {
+    unsubscribeTeamAccess();
+    unsubscribeTeamAccess = null;
+  }
   if (unsubscribeUsers) {
     unsubscribeUsers();
     unsubscribeUsers = null;
@@ -518,6 +537,95 @@ function seedCurrentAdminUserFallback() {
   syncAdminUsersCache();
 }
 
+
+function getProjectedAdminUsers(updatedUserId, teamIds, selectedUser) {
+  const usersById = new Map(adminUsersCache.map(user => [user.id, user]));
+  usersById.set(updatedUserId, {
+    id: updatedUserId,
+    email: selectedUser?.email || "Unbekannter User",
+    teamIds
+  });
+  return Array.from(usersById.values());
+}
+
+async function synchronizeTeamAccess(projectedUsers = adminUsersCache) {
+  const desiredAccess = buildDesiredTeamAccess(projectedUsers);
+  const existingAccess = await getDocs(collection(db, "teamAccess"));
+  const existingAccessById = new Map();
+  const batches = [];
+  let batch = writeBatch(db);
+  let operations = 0;
+
+  function queue(operation) {
+    operation(batch);
+    operations += 1;
+
+    if (operations >= 450) {
+      batches.push(batch);
+      batch = writeBatch(db);
+      operations = 0;
+    }
+  }
+
+  existingAccess.forEach(accessDoc => {
+    existingAccessById.set(accessDoc.id, accessDoc.data());
+
+    if (!desiredAccess.has(accessDoc.id)) {
+      queue(currentBatch => currentBatch.delete(accessDoc.ref));
+    }
+  });
+
+  desiredAccess.forEach((data, accessId) => {
+    const existingData = existingAccessById.get(accessId);
+    const accessChanged = !existingData
+      || existingData.viewerId !== data.viewerId
+      || existingData.targetUserId !== data.targetUserId
+      || existingData.teamId !== data.teamId;
+
+    if (accessChanged) {
+      queue(currentBatch => currentBatch.set(doc(db, "teamAccess", accessId), data, { merge: true }));
+    }
+  });
+
+  if (operations > 0) {
+    batches.push(batch);
+  }
+
+  await Promise.all(batches.map(currentBatch => currentBatch.commit()));
+}
+
+function buildDesiredTeamAccess(users) {
+  const accessById = new Map();
+
+  adminTeamsCache.forEach(team => {
+    const teamMembers = users.filter(user => Array.isArray(user.teamIds) && user.teamIds.includes(team.id));
+
+    teamMembers.forEach(viewer => {
+      teamMembers.forEach(target => {
+        if (viewer.id === target.id) {
+          return;
+        }
+
+        const accessId = getTeamAccessId(viewer.id, target.id);
+        if (!accessById.has(accessId)) {
+          accessById.set(accessId, {
+            viewerId: viewer.id,
+            targetUserId: target.id,
+            teamId: team.id,
+            createdAt: serverTimestamp()
+          });
+        }
+      });
+    });
+  });
+
+  return accessById;
+}
+
+function getTeamAccessId(viewerId, targetUserId) {
+  return `${viewerId}_${targetUserId}`;
+}
+
 function loadUsersForTeamVisibility() {
   unsubscribeUsers = onSnapshot(collection(db, "users"), snapshot => {
     usersCache = new Map();
@@ -536,6 +644,49 @@ function loadUsersForTeamVisibility() {
   }, error => {
     showFirebaseError("User-Teamdaten laden", error);
   });
+}
+
+
+function loadTeamAccess(userId) {
+  if (unsubscribeTeamAccess) {
+    unsubscribeTeamAccess();
+    unsubscribeTeamAccess = null;
+  }
+
+  const q = query(
+    collection(db, "teamAccess"),
+    where("viewerId", "==", userId)
+  );
+
+  unsubscribeTeamAccess = onSnapshot(q, snapshot => {
+    const nextTargetUserIds = new Set();
+
+    snapshot.forEach(accessDoc => {
+      const data = accessDoc.data();
+      if (data.targetUserId && data.targetUserId !== userId) {
+        nextTargetUserIds.add(data.targetUserId);
+      }
+    });
+
+    if (!setsHaveSameValues(teamAccessTargetUserIds, nextTargetUserIds)) {
+      teamAccessTargetUserIds = nextTargetUserIds;
+      restartTeamWorkoutSubscriptions();
+      return;
+    }
+
+    renderWorkoutTicker(getVisibleTeamWorkouts(comparisonWorkoutsCache).slice(0, TEAM_WORKOUT_FEED_LIMIT));
+    renderComparison();
+  }, error => {
+    showFirebaseError("Team-Zugriffe laden", error);
+  });
+}
+
+function setsHaveSameValues(first, second) {
+  if (first.size !== second.size) {
+    return false;
+  }
+
+  return Array.from(first).every(value => second.has(value));
 }
 
 function loadCurrentUserProfile(userId) {
@@ -912,48 +1063,126 @@ saveWorkoutBtn.addEventListener("click", async () => {
 });
 
 function loadWorkoutFeed() {
-  if (currentUserTeamIds.length === 0) {
+  const teamWorkoutUserIds = getAuthorizedTeamWorkoutUserIds({ includeSelf: true });
+
+  if (teamWorkoutUserIds.length === 0) {
     renderWorkoutTicker([]);
     return;
   }
 
-  const q = query(
-    collection(db, "workouts"),
-    where("teamIds", "array-contains-any", currentUserTeamIds.slice(0, 10)),
-    orderBy("createdAt", "desc"),
-    limit(TEAM_WORKOUT_QUERY_LIMIT)
-  );
+  unsubscribeWorkoutFeed = subscribeToWorkoutsByUserIds({
+    userIds: teamWorkoutUserIds,
+    perQueryLimit: TEAM_WORKOUT_QUERY_LIMIT,
+    onWorkoutsChange: workouts => {
+      const visibleWorkouts = getVisibleTeamWorkouts(workouts).slice(0, TEAM_WORKOUT_FEED_LIMIT);
+      renderWorkoutTicker(visibleWorkouts);
+    },
+    onNewWorkout: workout => {
+      if (workoutFeedInitialized && canSeeWorkoutInTeams(workout)) {
+        showWorkoutPushNotification(workout);
+      }
+    },
+    onInitialized: () => {
+      workoutFeedInitialized = true;
+    },
+    errorContext: "Info-Balken laden"
+  });
+}
 
-  unsubscribeWorkoutFeed = onSnapshot(q, snapshot => {
-    const workouts = [];
-    const newWorkoutNotifications = [];
+function getAuthorizedTeamWorkoutUserIds({ includeSelf = false } = {}) {
+  if (!currentUser) {
+    return [];
+  }
 
-    snapshot.forEach(doc => {
-      const data = getSnapshotData(doc);
-      workouts.push(createWorkoutFromDoc(doc.id, data));
-    });
+  const userIds = new Set(teamAccessTargetUserIds);
 
-    snapshot.docChanges().forEach(change => {
-      if (change.type !== "added" || seenWorkoutFeedIds.has(change.doc.id)) {
+  if (includeSelf && (currentUserTeamIds.length > 0 || teamAccessTargetUserIds.size > 0)) {
+    userIds.add(currentUser.uid);
+  }
+
+  return Array.from(userIds);
+}
+
+function subscribeToWorkoutsByUserIds({
+  userIds,
+  perQueryLimit,
+  onWorkoutsChange,
+  onNewWorkout,
+  onInitialized,
+  errorContext
+}) {
+  const uniqueUserIds = Array.from(new Set(userIds)).filter(Boolean);
+  const userIdChunks = chunkArray(uniqueUserIds, 30);
+  const chunkWorkouts = new Map();
+  const unsubscribers = [];
+  let initializedChunks = 0;
+  let stopped = false;
+
+  function publishWorkouts() {
+    const workouts = Array.from(chunkWorkouts.values())
+      .flat()
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, perQueryLimit);
+    onWorkoutsChange(workouts);
+  }
+
+  userIdChunks.forEach((userIdChunk, chunkIndex) => {
+    const q = query(
+      collection(db, "workouts"),
+      where("userId", "in", userIdChunk),
+      orderBy("createdAt", "desc"),
+      limit(perQueryLimit)
+    );
+
+    const unsubscribe = onSnapshot(q, snapshot => {
+      if (stopped) {
         return;
       }
 
-      seenWorkoutFeedIds.add(change.doc.id);
+      const hadChunk = chunkWorkouts.has(chunkIndex);
+      const workouts = [];
+      snapshot.forEach(workoutDoc => {
+        workouts.push(createWorkoutFromDoc(workoutDoc.id, getSnapshotData(workoutDoc)));
+      });
+      chunkWorkouts.set(chunkIndex, workouts);
 
-      if (workoutFeedInitialized) {
-        newWorkoutNotifications.push(createWorkoutFromDoc(change.doc.id, getSnapshotData(change.doc)));
+      if (onNewWorkout) {
+        snapshot.docChanges().forEach(change => {
+          if (change.type !== "added" || seenWorkoutFeedIds.has(change.doc.id)) {
+            return;
+          }
+
+          seenWorkoutFeedIds.add(change.doc.id);
+          onNewWorkout(createWorkoutFromDoc(change.doc.id, getSnapshotData(change.doc)));
+        });
       }
+
+      initializedChunks += hadChunk ? 0 : 1;
+      if (initializedChunks >= userIdChunks.length) {
+        onInitialized?.();
+      }
+      publishWorkouts();
+    }, error => {
+      showFirebaseError(errorContext, error);
     });
 
-    workoutFeedInitialized = true;
-    const visibleWorkouts = getVisibleTeamWorkouts(workouts).slice(0, TEAM_WORKOUT_FEED_LIMIT);
-    renderWorkoutTicker(visibleWorkouts);
-    newWorkoutNotifications
-      .filter(workout => canSeeWorkoutInTeams(workout))
-      .forEach(showWorkoutPushNotification);
-  }, error => {
-    showFirebaseError("Info-Balken laden", error);
+    unsubscribers.push(unsubscribe);
   });
+
+  return () => {
+    stopped = true;
+    unsubscribers.forEach(unsubscribe => unsubscribe());
+  };
+}
+
+function chunkArray(items, size) {
+  const chunks = [];
+
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+
+  return chunks;
 }
 
 function renderWorkoutTicker(workouts) {
@@ -1075,30 +1304,31 @@ function loadWorkouts() {
 }
 
 function loadComparisonWorkouts() {
-  if (currentUserTeamIds.length === 0) {
+  const comparisonUserIds = getAuthorizedComparisonUserIds();
+
+  if (comparisonUserIds.length === 0) {
     comparisonWorkoutsCache = [];
     renderComparison();
     return;
   }
 
-  const q = query(
-    collection(db, "workouts"),
-    where("teamIds", "array-contains-any", currentUserTeamIds.slice(0, 10)),
-    orderBy("createdAt", "desc"),
-    limit(250)
-  );
-
-  unsubscribeComparisonWorkouts = onSnapshot(q, snapshot => {
-    comparisonWorkoutsCache = [];
-
-    snapshot.forEach(doc => {
-      comparisonWorkoutsCache.push(createWorkoutFromDoc(doc.id, getSnapshotData(doc)));
-    });
-
-    renderComparison();
-  }, error => {
-    showFirebaseError("Team-Vergleich laden", error);
+  unsubscribeComparisonWorkouts = subscribeToWorkoutsByUserIds({
+    userIds: comparisonUserIds,
+    perQueryLimit: 250,
+    onWorkoutsChange: workouts => {
+      comparisonWorkoutsCache = workouts;
+      renderComparison();
+    },
+    errorContext: "Team-Vergleich laden"
   });
+}
+
+function getAuthorizedComparisonUserIds() {
+  if (!currentUser) {
+    return [];
+  }
+
+  return Array.from(new Set([currentUser.uid, ...teamAccessTargetUserIds]));
 }
 
 function getVisibleTeamWorkouts(workouts) {
@@ -1114,12 +1344,7 @@ function canSeeWorkoutInTeams(workout) {
     return true;
   }
 
-  if (currentUserTeamIds.length === 0) {
-    return false;
-  }
-
-  const workoutTeamIds = getWorkoutTeamIds(workout);
-  return workoutTeamIds.some(teamId => currentUserTeamIds.includes(teamId));
+  return teamAccessTargetUserIds.has(workout.userId);
 }
 
 function getWorkoutTeamIds(workout) {
