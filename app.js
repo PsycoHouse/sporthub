@@ -144,6 +144,7 @@ const adminLogoutBtn = document.getElementById("adminLogoutBtn");
 const teamNameInput = document.getElementById("teamName");
 const createTeamBtn = document.getElementById("createTeamBtn");
 const adminUserSelect = document.getElementById("adminUserSelect");
+const adminTeamList = document.getElementById("adminTeamList");
 const teamAssignmentList = document.getElementById("teamAssignmentList");
 const saveTeamAssignmentsBtn = document.getElementById("saveTeamAssignmentsBtn");
 const adminUserList = document.getElementById("adminUserList");
@@ -374,6 +375,8 @@ async function enterAdminMode() {
   appBox.hidden = true;
   adminBox.hidden = false;
   passwordInput.value = "";
+  adminTeamList.innerHTML = `<div class="emptyState">Teams werden geladen ...</div>`;
+  adminUserList.innerHTML = `<div class="emptyState">User werden geladen ...</div>`;
   setStatus("Admin-Umgebung geöffnet. Lade User und Teams ...");
   loadAdminData();
 }
@@ -536,6 +539,8 @@ function loadAdminData() {
     syncAdminUsersCache();
     clearStatus();
   }, error => {
+    adminProfileUsersCache = [];
+    adminUserList.innerHTML = `<div class="emptyState">User konnten nicht geladen werden. Prüfe, ob die Firestore-Regeln aus dem Repository veröffentlicht sind und ein admins/{uid}-Dokument für dieses Konto existiert.</div>`;
     showFirebaseError("Admin-User laden", error);
   });
 
@@ -576,10 +581,30 @@ function loadAdminData() {
     });
 
     adminTeamsCache.sort((a, b) => a.name.localeCompare(b.name, "de"));
+    renderAdminTeamList();
     syncAdminUsersCache();
     clearStatus();
   }, error => {
+    adminTeamsCache = [];
+    adminTeamList.innerHTML = `<div class="emptyState">Teams konnten nicht geladen werden. Prüfe die veröffentlichten Firestore-Regeln und den Firebase-Login.</div>`;
+    renderTeamAssignmentList();
     showFirebaseError("Admin-Teams laden", error);
+  });
+}
+
+function renderAdminTeamList() {
+  adminTeamList.innerHTML = "";
+
+  if (adminTeamsCache.length === 0) {
+    adminTeamList.innerHTML = `<div class="emptyState">Noch keine Teams erstellt. Neue Teams erscheinen nach dem Speichern automatisch hier.</div>`;
+    return;
+  }
+
+  adminTeamsCache.forEach(team => {
+    const item = document.createElement("article");
+    item.className = "adminTeamItem";
+    item.textContent = team.name;
+    adminTeamList.appendChild(item);
   });
 }
 
