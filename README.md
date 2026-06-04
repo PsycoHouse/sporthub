@@ -24,4 +24,4 @@ Wenn in der Firebase Console scheinbar nichts passiert, prüfe diese Punkte:
 
 ## Push-Benachrichtigungen
 
-Push funktioniert erst, wenn in `app.js` der Platzhalter `DEIN_PUBLIC_VAPID_KEY` durch den öffentlichen Web-Push-Zertifikatsschlüssel aus Firebase Cloud Messaging ersetzt wurde.
+Push verwendet den in `app.js` hinterlegten öffentlichen Web-Push-VAPID-Key (`publicVapidKey`). Falls Push nicht funktioniert, prüfe in Firebase Cloud Messaging, ob dieser Schlüssel zum Projekt passt.
