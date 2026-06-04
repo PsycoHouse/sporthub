@@ -5,7 +5,8 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  getIdTokenResult
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 import {
@@ -77,6 +78,7 @@ const PERSONAL_WORKOUT_HISTORY_LIMIT = 5;
 const TEAM_WORKOUT_FEED_LIMIT = 3;
 const TEAM_WORKOUT_QUERY_LIMIT = 100;
 const FAVORITE_EXERCISES_STORAGE_KEY = "sporthubFavoriteExercises";
+const ADMIN_EMAIL_ALLOWLIST = ["adrian.arab@hotmail.de"];
 
 const exerciseCatalog = [
   { name: "Liegestütze", unit: "Wiederholungen", icon: "💪" },
@@ -352,13 +354,35 @@ async function isAdminUser(user) {
     return false;
   }
 
+  if (isAllowlistedAdminEmail(user.email)) {
+    return true;
+  }
+
+  try {
+    const tokenResult = await getIdTokenResult(user, true);
+
+    if (tokenResult.claims.admin === true) {
+      return true;
+    }
+  } catch (error) {
+    console.warn("Admin-Claim konnte nicht geprüft werden:", error);
+  }
+
   try {
     const adminDoc = await getDoc(doc(db, "admins", user.uid));
     return adminDoc.exists();
   } catch (error) {
-    showFirebaseError("Admin-Berechtigung prüfen", error);
+    console.warn("Admin-Dokument konnte nicht geprüft werden:", error);
     return false;
   }
+}
+
+function isAllowlistedAdminEmail(email) {
+  return ADMIN_EMAIL_ALLOWLIST.includes(normalizeEmail(email));
+}
+
+function normalizeEmail(email) {
+  return (email || "").trim().toLowerCase();
 }
 
 async function enterAdminMode() {
