@@ -776,10 +776,19 @@ h2 {
   font-weight: 700;
 }
 
+.adminTeamOverview {
+  margin-top: 18px;
+}
+
 .teamAssignmentList,
+.adminTeamList,
 .adminUserList {
   display: grid;
   gap: 12px;
+}
+
+.adminTeamList {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }
 
 .teamCheckbox {
@@ -800,6 +809,15 @@ h2 {
   width: 20px;
   min-height: 20px;
   accent-color: var(--primary);
+}
+
+.adminTeamItem {
+  padding: 14px 16px;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: 18px;
+  background: rgba(56, 189, 248, 0.1);
+  color: #e0f2fe;
+  font-weight: 850;
 }
 
 .adminUserItem {
