@@ -1509,15 +1509,19 @@ function isWorkoutInSelectedComparisonTeam(workout) {
     return true;
   }
 
-  return getWorkoutTeamIds(workout).includes(selectedComparisonTeamId);
+  return isUserInComparisonTeam(workout.userId, selectedComparisonTeamId);
 }
 
-function getWorkoutTeamIds(workout) {
-  if (workout.teamIds?.length) {
-    return workout.teamIds;
+function isUserInComparisonTeam(userId, teamId) {
+  return getUserComparisonTeamIds(userId).includes(teamId);
+}
+
+function getUserComparisonTeamIds(userId) {
+  if (userId === currentUser?.uid) {
+    return currentUserTeamIds;
   }
 
-  return usersCache.get(workout.userId)?.teamIds || [];
+  return usersCache.get(userId)?.teamIds || [];
 }
 
 function renderComparison() {
