@@ -13,6 +13,7 @@ import {
   collection,
   addDoc,
   doc,
+  getDoc,
   setDoc,
   query,
   where,
@@ -75,9 +76,6 @@ const seenWorkoutFeedIds = new Set();
 const PERSONAL_WORKOUT_HISTORY_LIMIT = 5;
 const TEAM_WORKOUT_FEED_LIMIT = 3;
 const TEAM_WORKOUT_QUERY_LIMIT = 100;
-const ADMIN_USERNAME = "admin";
-const ADMIN_PASSWORD = "102938";
-const ADMIN_EMAILS = new Set(["adrian.arab@hotmail.de"]);
 const FAVORITE_EXERCISES_STORAGE_KEY = "sporthubFavoriteExercises";
 
 const exerciseCatalog = [
@@ -180,15 +178,10 @@ adminLoginShortcut.addEventListener("click", () => {
 });
 
 loginBtn.addEventListener("click", async () => {
-  const loginIdentifier = emailInput.value;
+  const loginIdentifier = emailInput.value.trim();
 
-  if (isAdminUsername(loginIdentifier)) {
-    if (!isAdminCredentials(loginIdentifier, passwordInput.value)) {
-      setStatus("Admin-Login fehlgeschlagen: Passwort ist falsch.", true);
-      return;
-    }
-
-    await enterAdminMode();
+  if (loginIdentifier.toLowerCase() === "admin") {
+    setStatus("Bitte mit der echten Admin-E-Mail und dem Firebase-Passwort einloggen. Die Admin-Berechtigung kommt aus admins/{uid}.", true);
     return;
   }
 
@@ -203,14 +196,14 @@ loginBtn.addEventListener("click", async () => {
       return;
     }
 
-    if (!isAdminEmail(credential.user.email)) {
+    if (!await isAdminUser(credential.user)) {
       resetAdminLoginShortcut();
       await signOut(auth);
-      setStatus("Admin-Login ist nur für berechtigte Konten möglich.", true);
+      setStatus("Admin-Login ist nur für Konten mit admins/{uid}-Dokument möglich.", true);
       return false;
     }
 
-    await enterAdminMode({ signOutCurrentUser: false });
+    await enterAdminMode();
     return false;
   });
 });
@@ -234,6 +227,7 @@ createTeamBtn.addEventListener("click", async () => {
   await runFirebaseAction("Team erstellen", async () => {
     await addDoc(collection(db, "teams"), {
       name: teamName,
+      ownerId: auth.currentUser.uid,
       createdAt: serverTimestamp()
     });
     teamNameInput.value = "";
@@ -302,8 +296,8 @@ onAuthStateChanged(auth, async user => {
   }
 
   if (user) {
-    if (isAdminEmail(user.email)) {
-      await enterAdminMode({ signOutCurrentUser: false });
+    if (await isAdminUser(user)) {
+      await enterAdminMode();
       return;
     }
 
@@ -313,11 +307,8 @@ onAuthStateChanged(auth, async user => {
     userInfo.textContent = `Eingeloggt als ${user.email}`;
     setStatus("Firebase Auth verbunden. Lade Firestore-Daten ...");
     await ensureUserProfile(user);
-    loadUsersForTeamVisibility();
     loadCurrentUserProfile(user.uid);
-    loadWorkoutFeed();
     loadWorkouts();
-    loadComparisonWorkouts();
   } else {
     loginBox.hidden = false;
     appBox.hidden = true;
@@ -349,31 +340,34 @@ exerciseInput.addEventListener("change", () => {
 });
 favoriteExerciseBtn.addEventListener("click", toggleFavoriteExercise);
 
-function isAdminUsername(email) {
-  return email.trim().toLowerCase() === ADMIN_USERNAME;
-}
-
-function isAdminCredentials(email, password) {
-  return isAdminUsername(email) && password === ADMIN_PASSWORD;
-}
-
 function resetAdminLoginShortcut() {
   preferAdminLogin = false;
   loginBox.classList.remove("adminLoginActive");
   adminLoginShortcut.setAttribute("aria-pressed", "false");
 }
 
-function isAdminEmail(email) {
-  return ADMIN_EMAILS.has((email || "").trim().toLowerCase());
+async function isAdminUser(user) {
+  if (!user) {
+    return false;
+  }
+
+  try {
+    const adminDoc = await getDoc(doc(db, "admins", user.uid));
+    return adminDoc.exists();
+  } catch (error) {
+    showFirebaseError("Admin-Berechtigung prüfen", error);
+    return false;
+  }
 }
 
-async function enterAdminMode({ signOutCurrentUser = true } = {}) {
+async function enterAdminMode() {
+  if (!auth.currentUser) {
+    setStatus("Bitte zuerst mit einem berechtigten Firebase-Konto einloggen.", true);
+    return;
+  }
+
   isAdminMode = true;
   cleanupRegularSubscriptions();
-
-  if (signOutCurrentUser && auth.currentUser) {
-    await signOut(auth);
-  }
 
   resetAdminLoginShortcut();
   loginBox.hidden = true;
@@ -473,13 +467,47 @@ function loadUsersForTeamVisibility() {
 function loadCurrentUserProfile(userId) {
   unsubscribeCurrentUserProfile = onSnapshot(doc(db, "users", userId), snapshot => {
     const data = snapshot.exists() ? snapshot.data() : {};
-    currentUserTeamIds = Array.isArray(data.teamIds) ? data.teamIds : [];
+    const nextTeamIds = Array.isArray(data.teamIds) ? data.teamIds : [];
+    const teamsChanged = !arraysHaveSameValues(currentUserTeamIds, nextTeamIds);
+    currentUserTeamIds = nextTeamIds;
     userInfo.textContent = `Eingeloggt als ${currentUser.email}${getTeamInfoSuffix(currentUserTeamIds)}`;
-    renderWorkoutTicker(getVisibleTeamWorkouts(comparisonWorkoutsCache).slice(0, TEAM_WORKOUT_FEED_LIMIT));
-    renderComparison();
+
+    if (teamsChanged || !unsubscribeWorkoutFeed || !unsubscribeComparisonWorkouts) {
+      restartTeamWorkoutSubscriptions();
+    } else {
+      renderWorkoutTicker(getVisibleTeamWorkouts(comparisonWorkoutsCache).slice(0, TEAM_WORKOUT_FEED_LIMIT));
+      renderComparison();
+    }
   }, error => {
     showFirebaseError("Eigene Teamdaten laden", error);
   });
+}
+
+function arraysHaveSameValues(first, second) {
+  if (first.length !== second.length) {
+    return false;
+  }
+
+  return first.every(value => second.includes(value));
+}
+
+function restartTeamWorkoutSubscriptions() {
+  if (unsubscribeWorkoutFeed) {
+    unsubscribeWorkoutFeed();
+    unsubscribeWorkoutFeed = null;
+  }
+
+  if (unsubscribeComparisonWorkouts) {
+    unsubscribeComparisonWorkouts();
+    unsubscribeComparisonWorkouts = null;
+  }
+
+  workoutFeedInitialized = false;
+  seenWorkoutFeedIds.clear();
+  comparisonWorkoutsCache = [];
+
+  loadWorkoutFeed();
+  loadComparisonWorkouts();
 }
 
 function getTeamInfoSuffix(teamIds) {
@@ -787,8 +815,14 @@ saveWorkoutBtn.addEventListener("click", async () => {
 });
 
 function loadWorkoutFeed() {
+  if (currentUserTeamIds.length === 0) {
+    renderWorkoutTicker([]);
+    return;
+  }
+
   const q = query(
     collection(db, "workouts"),
+    where("teamIds", "array-contains-any", currentUserTeamIds.slice(0, 10)),
     orderBy("createdAt", "desc"),
     limit(TEAM_WORKOUT_QUERY_LIMIT)
   );
@@ -944,8 +978,15 @@ function loadWorkouts() {
 }
 
 function loadComparisonWorkouts() {
+  if (currentUserTeamIds.length === 0) {
+    comparisonWorkoutsCache = [];
+    renderComparison();
+    return;
+  }
+
   const q = query(
     collection(db, "workouts"),
+    where("teamIds", "array-contains-any", currentUserTeamIds.slice(0, 10)),
     orderBy("createdAt", "desc"),
     limit(250)
   );
