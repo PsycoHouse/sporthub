@@ -486,7 +486,7 @@ function loadWorkouts() {
     workoutHistoryCache = workoutsCache.slice(0, PERSONAL_WORKOUT_HISTORY_LIMIT);
     renderWorkoutList(workoutHistoryCache);
     renderStats();
-    setStatus(`Firestore verbunden. Statistik aus ${workoutsCache.length} Einträgen synchronisiert; Verlauf zeigt die letzten ${workoutHistoryCache.length}.`);
+    clearStatus();
   }, error => {
     showFirebaseError("Firestore laden", error);
   });
@@ -1045,8 +1045,15 @@ function getReadableFirebaseError(error) {
 }
 
 function setStatus(message, isError = false) {
+  statusMessage.hidden = false;
   statusMessage.textContent = message;
   statusMessage.classList.toggle("error", isError);
+}
+
+function clearStatus() {
+  statusMessage.hidden = true;
+  statusMessage.textContent = "";
+  statusMessage.classList.remove("error");
 }
 
 window.firebaseDebug = {
