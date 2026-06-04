@@ -23,7 +23,8 @@ import {
 
 import {
   getMessaging,
-  getToken
+  getToken,
+  isSupported as isMessagingSupported
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 
 const firebaseConfig = {
@@ -42,6 +43,7 @@ const publicVapidKey = "BJedoQzwYnHdUMlK7HW7Zabu64927HoibICRtwKD0xjoTadWCk7AMM7I
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+let messagingServiceWorkerRegistration = null;
 
 let currentUser = null;
 let unsubscribeWorkouts = null;
@@ -211,7 +213,20 @@ enablePushBtn.addEventListener("click", async () => {
       throw new Error("Bitte zuerst den öffentlichen Web-Push-VAPID-Key in app.js eintragen.");
     }
 
-   const messaging
+    if (!await isMessagingSupported()) {
+      throw new Error("Push wird in diesem Browser nicht unterstützt.");
+    }
+
+    const serviceWorkerRegistration = await getMessagingServiceWorkerRegistration();
+    const messaging = getMessaging(app);
+    const token = await getToken(messaging, {
+      vapidKey: publicVapidKey,
+      serviceWorkerRegistration
+    });
+
+    if (!token) {
+      throw new Error("Firebase konnte keinen Push-Token erzeugen.");
+    }
 
     console.log("Push Token:", token);
 
@@ -222,6 +237,25 @@ enablePushBtn.addEventListener("click", async () => {
     });
   });
 });
+
+
+async function getMessagingServiceWorkerRegistration() {
+  if (!("serviceWorker" in navigator)) {
+    throw new Error("Service Worker werden in diesem Browser nicht unterstützt.");
+  }
+
+  if (messagingServiceWorkerRegistration) {
+    return messagingServiceWorkerRegistration;
+  }
+
+  const serviceWorkerUrl = new URL("firebase-messaging-sw.js", import.meta.url);
+  messagingServiceWorkerRegistration = await navigator.serviceWorker.register(
+    serviceWorkerUrl,
+    { scope: "./" }
+  );
+
+  return messagingServiceWorkerRegistration;
+}
 
 async function runFirebaseAction(label, action) {
   setStatus(`${label} läuft ...`);
