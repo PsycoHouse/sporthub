@@ -56,6 +56,39 @@ let workoutsCache = [];
 let comparisonWorkoutsCache = [];
 let workoutFeedInitialized = false;
 const seenWorkoutFeedIds = new Set();
+const PERSONAL_WORKOUT_HISTORY_LIMIT = 25;
+const TEAM_WORKOUT_FEED_LIMIT = 12;
+const FAVORITE_EXERCISES_STORAGE_KEY = "sporthubFavoriteExercises";
+
+const exerciseCatalog = [
+  { name: "Liegestütze", unit: "Wiederholungen", icon: "💪" },
+  { name: "Kniebeugen", unit: "Wiederholungen", icon: "⚡" },
+  { name: "Plank", unit: "Sekunden", icon: "🔥" },
+  { name: "Joggen", unit: "Kilometer", icon: "🏃" },
+  { name: "Burpees", unit: "Wiederholungen", icon: "💥" },
+  { name: "Sit-ups", unit: "Wiederholungen", icon: "🧱" },
+  { name: "Crunches", unit: "Wiederholungen", icon: "🔁" },
+  { name: "Ausfallschritte", unit: "Wiederholungen", icon: "🦵" },
+  { name: "Mountain Climbers", unit: "Wiederholungen", icon: "⛰️" },
+  { name: "Jumping Jacks", unit: "Wiederholungen", icon: "⭐" },
+  { name: "Klimmzüge", unit: "Wiederholungen", icon: "🧗" },
+  { name: "Dips", unit: "Wiederholungen", icon: "🏋️" },
+  { name: "Bankdrücken", unit: "Kilogramm", icon: "🏋️" },
+  { name: "Kreuzheben", unit: "Kilogramm", icon: "🏋️" },
+  { name: "Rudern", unit: "Minuten", icon: "🚣" },
+  { name: "Radfahren", unit: "Kilometer", icon: "🚴" },
+  { name: "Schwimmen", unit: "Meter", icon: "🏊" },
+  { name: "Seilspringen", unit: "Minuten", icon: "🪢" },
+  { name: "Yoga", unit: "Minuten", icon: "🧘" },
+  { name: "Pilates", unit: "Minuten", icon: "🧘" },
+  { name: "Hampelmänner", unit: "Wiederholungen", icon: "🤸" },
+  { name: "Wandsitz", unit: "Sekunden", icon: "🧱" },
+  { name: "Boxen", unit: "Minuten", icon: "🥊" },
+  { name: "Spazieren", unit: "Kilometer", icon: "🚶" },
+  { name: "Treppensteigen", unit: "Etagen", icon: "🪜" }
+];
+
+const favoriteExercises = new Set(loadFavoriteExercises());
 
 const loginBox = document.getElementById("loginBox");
 const appBox = document.getElementById("appBox");
@@ -69,6 +102,7 @@ const registerBtn = document.getElementById("registerBtn");
 const loginBtn = document.getElementById("loginBtn");
 const logoutBtn = document.getElementById("logoutBtn");
 const exerciseInput = document.getElementById("exercise");
+const favoriteExerciseBtn = document.getElementById("favoriteExerciseBtn");
 const valueInput = document.getElementById("value");
 const unitInput = document.getElementById("unit");
 const saveWorkoutBtn = document.getElementById("saveWorkoutBtn");
@@ -86,6 +120,9 @@ const comparisonExercise = document.getElementById("comparisonExercise");
 const comparisonSummary = document.getElementById("comparisonSummary");
 const comparisonList = document.getElementById("comparisonList");
 const enablePushBtn = document.getElementById("enablePushBtn");
+
+populateExerciseSelects();
+syncFavoriteExerciseButton();
 
 setStatus(`Firebase initialisiert: ${firebaseConfig.projectId}`);
 
@@ -167,6 +204,110 @@ statsFrom.addEventListener("change", renderStats);
 statsTo.addEventListener("change", renderStats);
 comparisonRange.addEventListener("change", renderComparison);
 comparisonExercise.addEventListener("change", renderComparison);
+exerciseInput.addEventListener("change", () => {
+  applyDefaultUnitForExercise();
+  syncFavoriteExerciseButton();
+});
+favoriteExerciseBtn.addEventListener("click", toggleFavoriteExercise);
+
+function populateExerciseSelects() {
+  populateExerciseSelect(exerciseInput, { includeAllOption: false });
+  populateExerciseSelect(comparisonExercise, { includeAllOption: true });
+  applyDefaultUnitForExercise();
+}
+
+function populateExerciseSelect(selectElement, { includeAllOption }) {
+  const currentValue = selectElement.value;
+  selectElement.replaceChildren();
+
+  if (includeAllOption) {
+    const allOption = document.createElement("option");
+    allOption.value = "all";
+    allOption.textContent = "Alle Übungen";
+    selectElement.appendChild(allOption);
+  }
+
+  const favoriteOptions = getSortedExercises().filter(exercise => favoriteExercises.has(exercise.name));
+  const regularOptions = getSortedExercises().filter(exercise => !favoriteExercises.has(exercise.name));
+
+  if (favoriteOptions.length > 0) {
+    selectElement.appendChild(createExerciseOptionGroup("Favoriten", favoriteOptions));
+  }
+
+  selectElement.appendChild(createExerciseOptionGroup("Alle Übungen", regularOptions));
+
+  if (currentValue && Array.from(selectElement.options).some(option => option.value === currentValue)) {
+    selectElement.value = currentValue;
+  } else if (includeAllOption) {
+    selectElement.value = "all";
+  }
+}
+
+function createExerciseOptionGroup(label, exercises) {
+  const group = document.createElement("optgroup");
+  group.label = label;
+
+  exercises.forEach(exercise => {
+    const option = document.createElement("option");
+    option.value = exercise.name;
+    option.textContent = `${exercise.icon} ${exercise.name}`;
+    group.appendChild(option);
+  });
+
+  return group;
+}
+
+function getSortedExercises() {
+  return [...exerciseCatalog].sort((a, b) => a.name.localeCompare(b.name, "de"));
+}
+
+function toggleFavoriteExercise() {
+  const exercise = exerciseInput.value;
+
+  if (favoriteExercises.has(exercise)) {
+    favoriteExercises.delete(exercise);
+    setStatus(`${exercise} aus den Favoriten entfernt.`);
+  } else {
+    favoriteExercises.add(exercise);
+    setStatus(`${exercise} als Favorit gespeichert.`);
+  }
+
+  saveFavoriteExercises();
+  populateExerciseSelects();
+  exerciseInput.value = exercise;
+  syncFavoriteExerciseButton();
+  renderComparison();
+}
+
+function syncFavoriteExerciseButton() {
+  const exercise = exerciseInput.value;
+  const isFavorite = favoriteExercises.has(exercise);
+  favoriteExerciseBtn.classList.toggle("isFavorite", isFavorite);
+  favoriteExerciseBtn.setAttribute("aria-pressed", String(isFavorite));
+  favoriteExerciseBtn.textContent = isFavorite ? "★ Favorit" : "☆ Favorisieren";
+}
+
+function applyDefaultUnitForExercise() {
+  const exercise = exerciseCatalog.find(item => item.name === exerciseInput.value);
+
+  if (exercise && Array.from(unitInput.options).some(option => option.value === exercise.unit)) {
+    unitInput.value = exercise.unit;
+  }
+}
+
+function loadFavoriteExercises() {
+  try {
+    const storedFavorites = JSON.parse(localStorage.getItem(FAVORITE_EXERCISES_STORAGE_KEY) || "[]");
+    return storedFavorites.filter(exercise => exerciseCatalog.some(item => item.name === exercise));
+  } catch (error) {
+    console.warn("Favoriten konnten nicht geladen werden:", error);
+    return [];
+  }
+}
+
+function saveFavoriteExercises() {
+  localStorage.setItem(FAVORITE_EXERCISES_STORAGE_KEY, JSON.stringify([...favoriteExercises]));
+}
 
 saveWorkoutBtn.addEventListener("click", async () => {
   if (!currentUser) {
@@ -197,7 +338,7 @@ function loadWorkoutFeed() {
   const q = query(
     collection(db, "workouts"),
     orderBy("createdAt", "desc"),
-    limit(5)
+    limit(TEAM_WORKOUT_FEED_LIMIT)
   );
 
   unsubscribeWorkoutFeed = onSnapshot(q, snapshot => {
@@ -320,7 +461,8 @@ function loadWorkouts() {
   const q = query(
     collection(db, "workouts"),
     where("userId", "==", currentUser.uid),
-    orderBy("createdAt", "desc")
+    orderBy("createdAt", "desc"),
+    limit(PERSONAL_WORKOUT_HISTORY_LIMIT)
   );
 
   unsubscribeWorkouts = onSnapshot(q, snapshot => {
@@ -334,7 +476,7 @@ function loadWorkouts() {
 
     renderWorkoutList(workoutsCache);
     renderStats();
-    setStatus(`Firestore verbunden. ${workoutsCache.length} Trainingseinträge geladen.`);
+    setStatus(`Firestore verbunden. ${workoutsCache.length} persönliche Verlaufseinträge geladen (bis zu ${PERSONAL_WORKOUT_HISTORY_LIMIT}).`);
   }, error => {
     showFirebaseError("Firestore laden", error);
   });
@@ -574,7 +716,7 @@ function isWorkoutInRange(workout, range) {
 }
 
 function renderRadarChart(exerciseTotals, entryCount, rangeLabel) {
-  const entries = Object.entries(exerciseTotals);
+  const entries = Object.entries(exerciseTotals).filter(([, value]) => value > 0);
   const maxValue = Math.max(...entries.map(([, value]) => value), 1);
   const center = 120;
   const maxRadius = 78;
@@ -582,6 +724,11 @@ function renderRadarChart(exerciseTotals, entryCount, rangeLabel) {
 
   radarChart.replaceChildren();
   radarLegend.replaceChildren();
+
+  if (entries.length === 0) {
+    radarSummary.textContent = `Keine Daten für ${rangeLabel}.`;
+    return;
+  }
 
   levels.forEach(level => {
     radarChart.appendChild(createSvgElement("polygon", {
@@ -642,18 +789,11 @@ function renderRadarChart(exerciseTotals, entryCount, rangeLabel) {
     radarLegend.appendChild(item);
   });
 
-  radarSummary.textContent = entryCount === 0
-    ? `Keine Daten für ${rangeLabel}.`
-    : `${entryCount} Einträge im Zeitraum ${rangeLabel}. Höchster Übungswert: ${formatNumber(maxValue)}.`;
+  radarSummary.textContent = `${entryCount} Einträge im Zeitraum ${rangeLabel}. Höchster Übungswert: ${formatNumber(maxValue)}.`;
 }
 
 function getExerciseTotals(workouts) {
-  const totals = {
-    "Liegestütze": 0,
-    "Kniebeugen": 0,
-    "Plank": 0,
-    "Joggen": 0
-  };
+  const totals = Object.fromEntries(exerciseCatalog.map(exercise => [exercise.name, 0]));
 
   workouts.forEach(workout => {
     totals[workout.exercise] = (totals[workout.exercise] || 0) + workout.value;
@@ -875,14 +1015,7 @@ function showFirebaseError(label, error) {
 }
 
 function getExerciseIcon(exercise) {
-  const icons = {
-    "Liegestütze": "💪",
-    "Kniebeugen": "⚡",
-    "Plank": "🔥",
-    "Joggen": "🏃"
-  };
-
-  return icons[exercise] || "✓";
+  return exerciseCatalog.find(item => item.name === exercise)?.icon || "✓";
 }
 
 function getReadableFirebaseError(error) {
