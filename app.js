@@ -37,6 +37,8 @@ const firebaseConfig = {
   measurementId: "G-BG3SE17BB7"
 };
 
+const publicVapidKey = "BJedoQzwYnHdUMlK7HW7Zabu64927HoibICRtwKD0xjoTadWCk7AMM7IDu9X1cBY5oqm3L5rUWrKEIcol0QdRPE";
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -205,16 +207,14 @@ enablePushBtn.addEventListener("click", async () => {
       throw new Error("Push wurde nicht erlaubt.");
     }
 
-    const vapidKey = "DEIN_PUBLIC_VAPID_KEY";
-
-    if (vapidKey === "DEIN_PUBLIC_VAPID_KEY") {
+    if (!publicVapidKey || publicVapidKey === "DEIN_PUBLIC_VAPID_KEY") {
       throw new Error("Bitte zuerst den öffentlichen Web-Push-VAPID-Key in app.js eintragen.");
     }
 
     const messaging = getMessaging(app);
 
     const token = await getToken(messaging, {
-      vapidKey: "BJedoQzwYnHdUMlK7HW7Zabu64927HoibICRtwKD0xjoTadWCk7AMM7IDu9X1cBY5oqm3L5rUWrKEIcol0QdRPE"
+      vapidKey: publicVapidKey
     });
 
     console.log("Push Token:", token);
