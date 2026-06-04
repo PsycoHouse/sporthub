@@ -25,12 +25,14 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 
 const firebaseConfig = {
-  apiKey: "DEIN_API_KEY",
-  authDomain: "DEIN_PROJEKT.firebaseapp.com",
-  projectId: "DEIN_PROJEKT",
-  storageBucket: "DEIN_PROJEKT.appspot.com",
-  messagingSenderId: "DEINE_SENDER_ID",
-  appId: "DEINE_APP_ID"
+  apiKey: "AIzaSyBTDz0R8WkY4ov8_28JMpe0jVmSD05oJb4",
+  authDomain: "sport-project-301c2.firebaseapp.com",
+  databaseURL: "https://sport-project-301c2-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "sport-project-301c2",
+  storageBucket: "sport-project-301c2.firebasestorage.app",
+  messagingSenderId: "743420630517",
+  appId: "1:743420630517:web:c99cdf9dcd7699aa37fcbc",
+  measurementId: "G-BG3SE17BB7"
 };
 
 const app = initializeApp(firebaseConfig);
