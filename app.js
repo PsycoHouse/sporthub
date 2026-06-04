@@ -391,6 +391,8 @@ async function enterAdminMode() {
     return;
   }
 
+  await ensureCurrentAdminProfile();
+
   isAdminMode = true;
   cleanupRegularSubscriptions();
 
@@ -471,6 +473,31 @@ async function ensureUserProfile(user) {
   }, { merge: true });
 }
 
+async function ensureCurrentAdminProfile() {
+  try {
+    await ensureUserProfile(auth.currentUser);
+  } catch (error) {
+    console.warn("Admin-Profil konnte nicht vorab gespeichert werden:", error);
+  }
+}
+
+function createUserSummaryFromAuthUser(user) {
+  return {
+    id: user.uid,
+    email: user.email || "Aktueller Admin-User",
+    teamIds: []
+  };
+}
+
+function seedCurrentAdminUserFallback() {
+  if (!auth.currentUser) {
+    return;
+  }
+
+  adminProfileUsersCache = [createUserSummaryFromAuthUser(auth.currentUser)];
+  syncAdminUsersCache();
+}
+
 function loadUsersForTeamVisibility() {
   unsubscribeUsers = onSnapshot(collection(db, "users"), snapshot => {
     usersCache = new Map();
@@ -547,6 +574,7 @@ function getTeamInfoSuffix(teamIds) {
 
 function loadAdminData() {
   cleanupAdminSubscriptions();
+  seedCurrentAdminUserFallback();
 
   unsubscribeAdminUsers = onSnapshot(collection(db, "users"), snapshot => {
     adminProfileUsersCache = [];
@@ -563,8 +591,8 @@ function loadAdminData() {
     syncAdminUsersCache();
     clearStatus();
   }, error => {
-    adminProfileUsersCache = [];
-    adminUserList.innerHTML = `<div class="emptyState">User konnten nicht geladen werden. Prüfe, ob die Firestore-Regeln aus dem Repository veröffentlicht sind und ein admins/{uid}-Dokument für dieses Konto existiert.</div>`;
+    seedCurrentAdminUserFallback();
+    adminUserList.insertAdjacentHTML("afterbegin", `<div class="emptyState">User-Liste konnte nicht vollständig geladen werden. Der aktuell eingeloggte Admin ist als Fallback verfügbar.</div>`);
     showFirebaseError("Admin-User laden", error);
   });
 
