@@ -218,43 +218,46 @@ function populateExerciseSelects() {
 
 function populateExerciseSelect(selectElement, { includeAllOption }) {
   const currentValue = selectElement.value;
+  const sortedExercises = getSortedExercises();
+  const favoriteOptions = sortedExercises.filter(exercise => favoriteExercises.has(exercise.name));
+  const regularOptions = sortedExercises.filter(exercise => !favoriteExercises.has(exercise.name));
+
   selectElement.replaceChildren();
 
   if (includeAllOption) {
-    const allOption = document.createElement("option");
-    allOption.value = "all";
-    allOption.textContent = "Alle Übungen";
-    selectElement.appendChild(allOption);
+    selectElement.appendChild(createSelectOption("all", "Alle Übungen"));
   }
-
-  const favoriteOptions = getSortedExercises().filter(exercise => favoriteExercises.has(exercise.name));
-  const regularOptions = getSortedExercises().filter(exercise => !favoriteExercises.has(exercise.name));
 
   if (favoriteOptions.length > 0) {
-    selectElement.appendChild(createExerciseOptionGroup("Favoriten", favoriteOptions));
+    appendExerciseOptions(selectElement, favoriteOptions, "★");
   }
 
-  selectElement.appendChild(createExerciseOptionGroup("Alle Übungen", regularOptions));
+  appendExerciseOptions(selectElement, regularOptions);
 
-  if (currentValue && Array.from(selectElement.options).some(option => option.value === currentValue)) {
+  const availableValues = Array.from(selectElement.options).map(option => option.value);
+
+  if (currentValue && availableValues.includes(currentValue)) {
     selectElement.value = currentValue;
   } else if (includeAllOption) {
     selectElement.value = "all";
+  } else if (availableValues.length > 0) {
+    selectElement.value = availableValues[0];
   }
 }
 
-function createExerciseOptionGroup(label, exercises) {
-  const group = document.createElement("optgroup");
-  group.label = label;
-
+function appendExerciseOptions(selectElement, exercises, prefix = "") {
   exercises.forEach(exercise => {
-    const option = document.createElement("option");
-    option.value = exercise.name;
-    option.textContent = `${exercise.icon} ${exercise.name}`;
-    group.appendChild(option);
+    const iconLabel = prefix ? `${prefix} ${exercise.icon}` : exercise.icon;
+    selectElement.appendChild(createSelectOption(exercise.name, `${iconLabel} ${exercise.name}`));
   });
+}
 
-  return group;
+function createSelectOption(value, label) {
+  const option = document.createElement("option");
+  option.value = value;
+  option.textContent = label;
+
+  return option;
 }
 
 function getSortedExercises() {
