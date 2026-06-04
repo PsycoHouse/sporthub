@@ -53,6 +53,7 @@ let unsubscribeWorkouts = null;
 let unsubscribeWorkoutFeed = null;
 let unsubscribeComparisonWorkouts = null;
 let workoutsCache = [];
+let workoutHistoryCache = [];
 let comparisonWorkoutsCache = [];
 let workoutFeedInitialized = false;
 const seenWorkoutFeedIds = new Set();
@@ -186,6 +187,7 @@ onAuthStateChanged(auth, user => {
     appBox.hidden = true;
     workoutList.innerHTML = "";
     workoutsCache = [];
+    workoutHistoryCache = [];
     comparisonWorkoutsCache = [];
     stats.textContent = "";
     renderWorkoutTicker([]);
@@ -349,7 +351,7 @@ function loadWorkoutFeed() {
     const newWorkoutNotifications = [];
 
     snapshot.forEach(doc => {
-      const data = doc.data();
+      const data = getSnapshotData(doc);
       workouts.push(createWorkoutFromDoc(doc.id, data));
     });
 
@@ -361,7 +363,7 @@ function loadWorkoutFeed() {
       seenWorkoutFeedIds.add(change.doc.id);
 
       if (workoutFeedInitialized) {
-        newWorkoutNotifications.push(createWorkoutFromDoc(change.doc.id, change.doc.data()));
+        newWorkoutNotifications.push(createWorkoutFromDoc(change.doc.id, getSnapshotData(change.doc)));
       }
     });
 
@@ -401,6 +403,10 @@ function renderWorkoutTicker(workouts) {
     item.append(icon, message);
     workoutTickerList.appendChild(item);
   });
+}
+
+function getSnapshotData(doc) {
+  return doc.data({ serverTimestamps: "estimate" });
 }
 
 function createWorkoutFromDoc(id, data) {
@@ -464,22 +470,23 @@ function loadWorkouts() {
   const q = query(
     collection(db, "workouts"),
     where("userId", "==", currentUser.uid),
-    orderBy("createdAt", "desc"),
-    limit(PERSONAL_WORKOUT_HISTORY_LIMIT)
+    orderBy("createdAt", "desc")
   );
 
   unsubscribeWorkouts = onSnapshot(q, snapshot => {
     workoutsCache = [];
+    workoutHistoryCache = [];
     workoutList.innerHTML = "";
 
     snapshot.forEach(doc => {
-      const data = doc.data();
-      workoutsCache.push(createWorkoutFromDoc(doc.id, data));
+      const workout = createWorkoutFromDoc(doc.id, getSnapshotData(doc));
+      workoutsCache.push(workout);
     });
 
-    renderWorkoutList(workoutsCache);
+    workoutHistoryCache = workoutsCache.slice(0, PERSONAL_WORKOUT_HISTORY_LIMIT);
+    renderWorkoutList(workoutHistoryCache);
     renderStats();
-    setStatus(`Firestore verbunden. ${workoutsCache.length} persönliche Verlaufseinträge geladen (bis zu ${PERSONAL_WORKOUT_HISTORY_LIMIT}).`);
+    setStatus(`Firestore verbunden. Statistik aus ${workoutsCache.length} Einträgen synchronisiert; Verlauf zeigt die letzten ${workoutHistoryCache.length}.`);
   }, error => {
     showFirebaseError("Firestore laden", error);
   });
@@ -496,7 +503,7 @@ function loadComparisonWorkouts() {
     comparisonWorkoutsCache = [];
 
     snapshot.forEach(doc => {
-      comparisonWorkoutsCache.push(createWorkoutFromDoc(doc.id, doc.data()));
+      comparisonWorkoutsCache.push(createWorkoutFromDoc(doc.id, getSnapshotData(doc)));
     });
 
     renderComparison();
