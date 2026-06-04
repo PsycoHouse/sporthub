@@ -83,6 +83,37 @@
           <button id="saveWorkoutBtn" class="primaryBtn">Training speichern</button>
         </section>
 
+
+        <section class="card comparisonCard" aria-labelledby="comparisonTitle">
+          <div class="sectionHeader">
+            <p class="eyebrow">Team-Vergleich</p>
+            <h2 id="comparisonTitle">Trainingsfortschritt vergleichen</h2>
+          </div>
+          <div class="comparisonControls" aria-label="Vergleich filtern">
+            <div class="fieldGroup">
+              <label for="comparisonRange">Zeitraum</label>
+              <select id="comparisonRange">
+                <option value="week">Diese Woche</option>
+                <option value="last7">Letzte 7 Tage</option>
+                <option value="month">Dieser Monat</option>
+                <option value="last30">Letzte 30 Tage</option>
+                <option value="all">Alles</option>
+              </select>
+            </div>
+            <div class="fieldGroup">
+              <label for="comparisonExercise">Übung</label>
+              <select id="comparisonExercise">
+                <option value="all">Alle Übungen</option>
+                <option>Liegestütze</option>
+                <option>Kniebeugen</option>
+                <option>Plank</option>
+                <option>Joggen</option>
+              </select>
+            </div>
+          </div>
+          <p id="comparisonSummary" class="comparisonSummary">Der Team-Vergleich wird geladen ...</p>
+          <div id="comparisonList" class="comparisonList" aria-live="polite"></div>
+        </section>
         <section class="dashboardGrid">
           <section class="card" aria-labelledby="historyTitle">
             <div class="sectionHeader inlineHeader">

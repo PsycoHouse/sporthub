@@ -498,6 +498,109 @@ h2 {
   font-weight: 800;
 }
 
+
+.comparisonCard {
+  background:
+    linear-gradient(145deg, rgba(56, 189, 248, 0.16), transparent 52%),
+    linear-gradient(315deg, rgba(52, 211, 153, 0.12), transparent 46%),
+    var(--card-strong);
+}
+
+.comparisonControls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.comparisonControls label {
+  margin-top: 0;
+}
+
+.comparisonSummary {
+  margin: 0 0 14px;
+  color: #dff6ff;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.comparisonList {
+  display: grid;
+  gap: 12px;
+}
+
+.comparisonItem {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.comparisonItem.isCurrentUser {
+  border-color: rgba(56, 189, 248, 0.58);
+  background: rgba(56, 189, 248, 0.14);
+  box-shadow: 0 18px 38px rgba(56, 189, 248, 0.12);
+}
+
+.comparisonRank {
+  display: grid;
+  width: 50px;
+  height: 50px;
+  place-items: center;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.7);
+  color: #67e8f9;
+  font-weight: 950;
+}
+
+.comparisonContent {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.comparisonItemHeader {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  color: #f8fafc;
+  font-weight: 900;
+}
+
+.comparisonItemHeader strong,
+.comparisonItemHeader span {
+  overflow-wrap: anywhere;
+}
+
+.comparisonItemHeader span {
+  color: #bae6fd;
+}
+
+.comparisonProgress {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.78);
+}
+
+.comparisonProgress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--success), var(--primary));
+}
+
+.comparisonDetails {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 750;
+}
+
 @media (max-width: 880px) {
   .appShell {
     grid-template-columns: 1fr;
@@ -509,7 +612,8 @@ h2 {
     top: auto;
   }
 
-  .dashboardGrid {
+  .dashboardGrid,
+  .comparisonControls {
     grid-template-columns: 1fr;
   }
 }
@@ -528,8 +632,18 @@ h2 {
   .buttonRow,
   .formGrid,
   .customRange,
+  .comparisonControls,
   .dashboardTop {
     grid-template-columns: 1fr;
+  }
+
+  .comparisonItem,
+  .comparisonItemHeader {
+    grid-template-columns: 1fr;
+  }
+
+  .comparisonItemHeader {
+    display: grid;
   }
 
   .ghostBtn {
