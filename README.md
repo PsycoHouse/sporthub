@@ -25,3 +25,14 @@ Wenn in der Firebase Console scheinbar nichts passiert, prüfe diese Punkte:
 ## Push-Benachrichtigungen
 
 Push verwendet den in `app.js` hinterlegten öffentlichen Web-Push-VAPID-Key (`publicVapidKey`). Falls Push nicht funktioniert, prüfe in Firebase Cloud Messaging, ob dieser Schlüssel zum Projekt passt.
+
+## Admin-Umgebung und Teams
+
+Über den Login `admin` mit Passwort `102938` öffnet sich die Admin-Umgebung. Dort können Teams erstellt und registrierte Nutzer mehreren Teams zugeordnet werden. Nutzer erscheinen in der Admin-Liste, sobald sie sich mit der App angemeldet oder bereits Trainings gespeichert haben; die App pflegt dafür Firestore-Dokumente in der Collection `users`.
+
+Die Team-Zuordnung wird in `users/{uid}.teamIds` gespeichert. Neue Trainings speichern zusätzlich die aktuellen `teamIds` des Nutzers. Der Team-Vergleich und die Live-Trainings filtern dadurch auf Personen, die mindestens ein Team mit dem eingeloggten Nutzer teilen.
+
+Zusätzlich zur bestehenden Collection `workouts` nutzt die App jetzt:
+
+- `users`: E-Mail-Adresse und Team-Zuordnungen der angemeldeten Nutzer
+- `teams`: Teamnamen, die in der Admin-Umgebung verwaltet werden
