@@ -692,3 +692,112 @@ h2 {
   text-align: center;
   background: rgba(255, 255, 255, 0.035);
 }
+
+.adminDashboard {
+  align-items: stretch;
+}
+
+.adminTop {
+  background:
+    linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(56, 189, 248, 0.12)),
+    var(--card-strong);
+}
+
+.adminHint {
+  max-width: 760px;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.adminCard {
+  background:
+    linear-gradient(145deg, rgba(167, 139, 250, 0.12), transparent 55%),
+    var(--card);
+}
+
+.adminFormRow,
+.adminAssignmentGrid {
+  display: grid;
+  gap: 14px;
+}
+
+.adminFormRow {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.adminFormRow .primaryBtn {
+  width: auto;
+  min-width: 180px;
+}
+
+.adminAssignmentGrid {
+  grid-template-columns: minmax(240px, 0.4fr) minmax(0, 1fr);
+  margin-bottom: 18px;
+}
+
+.adminSectionLabel {
+  margin: 0 0 7px;
+  color: #cbd5e1;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.teamAssignmentList,
+.adminUserList {
+  display: grid;
+  gap: 12px;
+}
+
+.teamCheckbox {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 52px;
+  padding: 12px 14px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.055);
+  color: #f8fafc;
+  cursor: pointer;
+}
+
+.teamCheckbox input {
+  width: 20px;
+  min-height: 20px;
+  accent-color: var(--primary);
+}
+
+.adminUserItem {
+  display: grid;
+  gap: 8px;
+  padding: 15px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.adminUserItem strong {
+  overflow-wrap: anywhere;
+  color: #f8fafc;
+}
+
+.adminUserItem p {
+  margin: 0;
+  color: var(--muted);
+  font-weight: 750;
+}
+
+@media (max-width: 880px) {
+  .adminFormRow,
+  .adminAssignmentGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .adminFormRow .primaryBtn {
+    width: 100%;
+  }
+}

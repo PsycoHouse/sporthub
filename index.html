@@ -29,13 +29,66 @@
           <h2 id="loginTitle">Einloggen oder starten</h2>
         </div>
         <label for="email">E-Mail</label>
-        <input id="email" type="email" placeholder="name@example.com" autocomplete="email" />
+        <input id="email" type="text" placeholder="name@example.com oder admin" autocomplete="email" />
         <label for="password">Passwort</label>
         <input id="password" type="password" placeholder="Mindestens 6 Zeichen" autocomplete="current-password" />
         <div class="buttonRow">
           <button id="loginBtn" class="primaryBtn">Einloggen</button>
           <button id="registerBtn" class="secondaryBtn">Registrieren</button>
         </div>
+      </section>
+
+
+
+      <section id="adminBox" class="dashboard adminDashboard" hidden>
+        <div class="dashboardTop card adminTop">
+          <div>
+            <p class="eyebrow">Admin-Umgebung</p>
+            <h2>Teams & User verwalten</h2>
+            <p class="adminHint">Mit dem Admin-Login kannst du User mehreren Teams zuordnen. Teammitglieder sehen nur Trainingsfortschritte von Personen, mit denen sie mindestens ein Team teilen.</p>
+          </div>
+          <button id="adminLogoutBtn" class="ghostBtn">Admin verlassen</button>
+        </div>
+
+        <section class="card adminCard" aria-labelledby="teamCreateTitle">
+          <div class="sectionHeader">
+            <p class="eyebrow">Teams</p>
+            <h2 id="teamCreateTitle">Neues Team erstellen</h2>
+          </div>
+          <div class="adminFormRow">
+            <div class="fieldGroup">
+              <label for="teamName">Teamname</label>
+              <input id="teamName" type="text" placeholder="z. B. Team 1" />
+            </div>
+            <button id="createTeamBtn" class="primaryBtn">Team erstellen</button>
+          </div>
+        </section>
+
+        <section class="card adminCard" aria-labelledby="assignmentTitle">
+          <div class="sectionHeader">
+            <p class="eyebrow">Zuordnung</p>
+            <h2 id="assignmentTitle">User Teams zuordnen</h2>
+          </div>
+          <div class="adminAssignmentGrid">
+            <div class="fieldGroup">
+              <label for="adminUserSelect">User</label>
+              <select id="adminUserSelect"></select>
+            </div>
+            <div>
+              <p class="adminSectionLabel">Teams</p>
+              <div id="teamAssignmentList" class="teamAssignmentList"></div>
+            </div>
+          </div>
+          <button id="saveTeamAssignmentsBtn" class="primaryBtn">Zuordnung speichern</button>
+        </section>
+
+        <section class="card adminCard" aria-labelledby="adminUsersTitle">
+          <div class="sectionHeader">
+            <p class="eyebrow">Übersicht</p>
+            <h2 id="adminUsersTitle">Angemeldete E-Mail-Adressen & Teams</h2>
+          </div>
+          <div id="adminUserList" class="adminUserList" aria-live="polite"></div>
+        </section>
       </section>
 
       <section id="appBox" class="dashboard" hidden>

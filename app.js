@@ -12,6 +12,8 @@ import {
   getFirestore,
   collection,
   addDoc,
+  doc,
+  setDoc,
   query,
   where,
   orderBy,
@@ -49,16 +51,31 @@ let messagingServiceWorkerRegistration = null;
 let unsubscribeForegroundMessages = null;
 
 let currentUser = null;
+let isAdminMode = false;
 let unsubscribeWorkouts = null;
 let unsubscribeWorkoutFeed = null;
 let unsubscribeComparisonWorkouts = null;
+let unsubscribeCurrentUserProfile = null;
+let unsubscribeUsers = null;
+let unsubscribeAdminUsers = null;
+let unsubscribeAdminTeams = null;
+let unsubscribeAdminWorkouts = null;
 let workoutsCache = [];
 let workoutHistoryCache = [];
 let comparisonWorkoutsCache = [];
+let usersCache = new Map();
+let adminUsersCache = [];
+let adminProfileUsersCache = [];
+let adminWorkoutUsersCache = [];
+let adminTeamsCache = [];
+let currentUserTeamIds = [];
 let workoutFeedInitialized = false;
 const seenWorkoutFeedIds = new Set();
 const PERSONAL_WORKOUT_HISTORY_LIMIT = 5;
 const TEAM_WORKOUT_FEED_LIMIT = 3;
+const TEAM_WORKOUT_QUERY_LIMIT = 100;
+const ADMIN_EMAIL = "admin";
+const ADMIN_PASSWORD = "102938";
 const FAVORITE_EXERCISES_STORAGE_KEY = "sporthubFavoriteExercises";
 
 const exerciseCatalog = [
@@ -93,6 +110,7 @@ const favoriteExercises = new Set(loadFavoriteExercises());
 
 const loginBox = document.getElementById("loginBox");
 const appBox = document.getElementById("appBox");
+const adminBox = document.getElementById("adminBox");
 const userInfo = document.getElementById("userInfo");
 const workoutTicker = document.getElementById("workoutTicker");
 const workoutTickerList = document.getElementById("workoutTickerList");
@@ -121,6 +139,13 @@ const comparisonExercise = document.getElementById("comparisonExercise");
 const comparisonSummary = document.getElementById("comparisonSummary");
 const comparisonList = document.getElementById("comparisonList");
 const enablePushBtn = document.getElementById("enablePushBtn");
+const adminLogoutBtn = document.getElementById("adminLogoutBtn");
+const teamNameInput = document.getElementById("teamName");
+const createTeamBtn = document.getElementById("createTeamBtn");
+const adminUserSelect = document.getElementById("adminUserSelect");
+const teamAssignmentList = document.getElementById("teamAssignmentList");
+const saveTeamAssignmentsBtn = document.getElementById("saveTeamAssignmentsBtn");
+const adminUserList = document.getElementById("adminUserList");
 
 populateExerciseSelects();
 syncFavoriteExerciseButton();
@@ -138,6 +163,11 @@ registerBtn.addEventListener("click", async () => {
 });
 
 loginBtn.addEventListener("click", async () => {
+  if (isAdminCredentials(emailInput.value, passwordInput.value)) {
+    await enterAdminMode();
+    return;
+  }
+
   await runFirebaseAction("Login", async () => {
     await signInWithEmailAndPassword(
       auth,
@@ -153,7 +183,50 @@ logoutBtn.addEventListener("click", async () => {
   });
 });
 
-onAuthStateChanged(auth, user => {
+adminLogoutBtn.addEventListener("click", exitAdminMode);
+
+createTeamBtn.addEventListener("click", async () => {
+  const teamName = teamNameInput.value.trim();
+
+  if (!teamName) {
+    setStatus("Bitte einen Teamnamen eingeben.", true);
+    return;
+  }
+
+  await runFirebaseAction("Team erstellen", async () => {
+    await addDoc(collection(db, "teams"), {
+      name: teamName,
+      createdAt: serverTimestamp()
+    });
+    teamNameInput.value = "";
+  });
+});
+
+adminUserSelect.addEventListener("change", renderTeamAssignmentList);
+
+saveTeamAssignmentsBtn.addEventListener("click", async () => {
+  const userId = adminUserSelect.value;
+
+  if (!userId) {
+    setStatus("Bitte zuerst einen User auswählen.", true);
+    return;
+  }
+
+  const teamIds = Array.from(teamAssignmentList.querySelectorAll("input:checked"))
+    .map(input => input.value);
+
+  const selectedUser = adminUsersCache.find(user => user.id === userId);
+
+  await runFirebaseAction("Team-Zuordnung speichern", async () => {
+    await setDoc(doc(db, "users", userId), {
+      email: selectedUser?.email || "Unbekannter User",
+      teamIds,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  });
+});
+
+onAuthStateChanged(auth, async user => {
   currentUser = user;
 
   if (unsubscribeWorkouts) {
@@ -171,20 +244,41 @@ onAuthStateChanged(auth, user => {
     unsubscribeComparisonWorkouts = null;
   }
 
+  if (unsubscribeCurrentUserProfile) {
+    unsubscribeCurrentUserProfile();
+    unsubscribeCurrentUserProfile = null;
+  }
+
+  if (unsubscribeUsers) {
+    unsubscribeUsers();
+    unsubscribeUsers = null;
+  }
+
   workoutFeedInitialized = false;
   seenWorkoutFeedIds.clear();
+  usersCache = new Map();
+  currentUserTeamIds = [];
+
+  if (isAdminMode) {
+    return;
+  }
 
   if (user) {
     loginBox.hidden = true;
     appBox.hidden = false;
+    adminBox.hidden = true;
     userInfo.textContent = `Eingeloggt als ${user.email}`;
     setStatus("Firebase Auth verbunden. Lade Firestore-Daten ...");
+    await ensureUserProfile(user);
+    loadUsersForTeamVisibility();
+    loadCurrentUserProfile(user.uid);
     loadWorkoutFeed();
     loadWorkouts();
     loadComparisonWorkouts();
   } else {
     loginBox.hidden = false;
     appBox.hidden = true;
+    adminBox.hidden = true;
     workoutList.innerHTML = "";
     workoutsCache = [];
     workoutHistoryCache = [];
@@ -211,6 +305,290 @@ exerciseInput.addEventListener("change", () => {
   syncFavoriteExerciseButton();
 });
 favoriteExerciseBtn.addEventListener("click", toggleFavoriteExercise);
+
+function isAdminCredentials(email, password) {
+  return email.trim().toLowerCase() === ADMIN_EMAIL && password === ADMIN_PASSWORD;
+}
+
+async function enterAdminMode() {
+  isAdminMode = true;
+  cleanupRegularSubscriptions();
+
+  if (auth.currentUser) {
+    await signOut(auth);
+  }
+
+  loginBox.hidden = true;
+  appBox.hidden = true;
+  adminBox.hidden = false;
+  passwordInput.value = "";
+  setStatus("Admin-Umgebung geöffnet. Lade User und Teams ...");
+  loadAdminData();
+}
+
+function exitAdminMode() {
+  isAdminMode = false;
+  cleanupAdminSubscriptions();
+  adminBox.hidden = true;
+  loginBox.hidden = false;
+  setStatus("Admin-Umgebung geschlossen.");
+}
+
+function cleanupRegularSubscriptions() {
+  if (unsubscribeWorkouts) {
+    unsubscribeWorkouts();
+    unsubscribeWorkouts = null;
+  }
+  if (unsubscribeWorkoutFeed) {
+    unsubscribeWorkoutFeed();
+    unsubscribeWorkoutFeed = null;
+  }
+  if (unsubscribeComparisonWorkouts) {
+    unsubscribeComparisonWorkouts();
+    unsubscribeComparisonWorkouts = null;
+  }
+  if (unsubscribeCurrentUserProfile) {
+    unsubscribeCurrentUserProfile();
+    unsubscribeCurrentUserProfile = null;
+  }
+  if (unsubscribeUsers) {
+    unsubscribeUsers();
+    unsubscribeUsers = null;
+  }
+}
+
+function cleanupAdminSubscriptions() {
+  if (unsubscribeAdminUsers) {
+    unsubscribeAdminUsers();
+    unsubscribeAdminUsers = null;
+  }
+
+  if (unsubscribeAdminTeams) {
+    unsubscribeAdminTeams();
+    unsubscribeAdminTeams = null;
+  }
+
+  if (unsubscribeAdminWorkouts) {
+    unsubscribeAdminWorkouts();
+    unsubscribeAdminWorkouts = null;
+  }
+}
+
+async function ensureUserProfile(user) {
+  await setDoc(doc(db, "users", user.uid), {
+    email: user.email || "Unbekannter User",
+    lastLoginAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  }, { merge: true });
+}
+
+function loadUsersForTeamVisibility() {
+  unsubscribeUsers = onSnapshot(collection(db, "users"), snapshot => {
+    usersCache = new Map();
+
+    snapshot.forEach(userDoc => {
+      const data = userDoc.data();
+      usersCache.set(userDoc.id, {
+        id: userDoc.id,
+        email: data.email || "Unbekannter User",
+        teamIds: Array.isArray(data.teamIds) ? data.teamIds : []
+      });
+    });
+
+    renderWorkoutTicker(getVisibleTeamWorkouts(comparisonWorkoutsCache).slice(0, TEAM_WORKOUT_FEED_LIMIT));
+    renderComparison();
+  }, error => {
+    showFirebaseError("User-Teamdaten laden", error);
+  });
+}
+
+function loadCurrentUserProfile(userId) {
+  unsubscribeCurrentUserProfile = onSnapshot(doc(db, "users", userId), snapshot => {
+    const data = snapshot.exists() ? snapshot.data() : {};
+    currentUserTeamIds = Array.isArray(data.teamIds) ? data.teamIds : [];
+    userInfo.textContent = `Eingeloggt als ${currentUser.email}${getTeamInfoSuffix(currentUserTeamIds)}`;
+    renderWorkoutTicker(getVisibleTeamWorkouts(comparisonWorkoutsCache).slice(0, TEAM_WORKOUT_FEED_LIMIT));
+    renderComparison();
+  }, error => {
+    showFirebaseError("Eigene Teamdaten laden", error);
+  });
+}
+
+function getTeamInfoSuffix(teamIds) {
+  if (teamIds.length === 0) {
+    return " · keinem Team zugeordnet";
+  }
+
+  return ` · ${teamIds.length} Team${teamIds.length === 1 ? "" : "s"}`;
+}
+
+function loadAdminData() {
+  cleanupAdminSubscriptions();
+
+  unsubscribeAdminUsers = onSnapshot(collection(db, "users"), snapshot => {
+    adminProfileUsersCache = [];
+
+    snapshot.forEach(userDoc => {
+      const data = userDoc.data();
+      adminProfileUsersCache.push({
+        id: userDoc.id,
+        email: data.email || "Unbekannter User",
+        teamIds: Array.isArray(data.teamIds) ? data.teamIds : []
+      });
+    });
+
+    syncAdminUsersCache();
+    clearStatus();
+  }, error => {
+    showFirebaseError("Admin-User laden", error);
+  });
+
+  unsubscribeAdminWorkouts = onSnapshot(query(
+    collection(db, "workouts"),
+    orderBy("createdAt", "desc"),
+    limit(1000)
+  ), snapshot => {
+    const workoutUsers = new Map();
+
+    snapshot.forEach(workoutDoc => {
+      const workout = createWorkoutFromDoc(workoutDoc.id, getSnapshotData(workoutDoc));
+
+      if (workout.userId && !workoutUsers.has(workout.userId)) {
+        workoutUsers.set(workout.userId, {
+          id: workout.userId,
+          email: workout.userEmail,
+          teamIds: []
+        });
+      }
+    });
+
+    adminWorkoutUsersCache = Array.from(workoutUsers.values());
+    syncAdminUsersCache();
+  }, error => {
+    showFirebaseError("Admin-Workout-User laden", error);
+  });
+
+  unsubscribeAdminTeams = onSnapshot(collection(db, "teams"), snapshot => {
+    adminTeamsCache = [];
+
+    snapshot.forEach(teamDoc => {
+      const data = teamDoc.data();
+      adminTeamsCache.push({
+        id: teamDoc.id,
+        name: data.name || "Unbenanntes Team"
+      });
+    });
+
+    adminTeamsCache.sort((a, b) => a.name.localeCompare(b.name, "de"));
+    syncAdminUsersCache();
+    clearStatus();
+  }, error => {
+    showFirebaseError("Admin-Teams laden", error);
+  });
+}
+
+function syncAdminUsersCache() {
+  const usersById = new Map();
+
+  adminWorkoutUsersCache.forEach(user => {
+    usersById.set(user.id, user);
+  });
+
+  adminProfileUsersCache.forEach(user => {
+    usersById.set(user.id, user);
+  });
+
+  adminUsersCache = Array.from(usersById.values())
+    .sort((a, b) => a.email.localeCompare(b.email, "de"));
+
+  renderAdminUserSelect();
+  renderAdminUserList();
+}
+
+function renderAdminUserSelect() {
+  const selectedUserId = adminUserSelect.value;
+  adminUserSelect.replaceChildren();
+
+  if (adminUsersCache.length === 0) {
+    adminUserSelect.appendChild(createSelectOption("", "Noch keine User gefunden"));
+    renderTeamAssignmentList();
+    return;
+  }
+
+  adminUsersCache.forEach(user => {
+    adminUserSelect.appendChild(createSelectOption(user.id, user.email));
+  });
+
+  if (adminUsersCache.some(user => user.id === selectedUserId)) {
+    adminUserSelect.value = selectedUserId;
+  }
+
+  renderTeamAssignmentList();
+}
+
+function renderTeamAssignmentList() {
+  teamAssignmentList.innerHTML = "";
+  const selectedUser = adminUsersCache.find(user => user.id === adminUserSelect.value);
+
+  if (!selectedUser) {
+    teamAssignmentList.innerHTML = `<div class="emptyState">Wähle einen User aus, um Teams zuzuordnen.</div>`;
+    return;
+  }
+
+  if (adminTeamsCache.length === 0) {
+    teamAssignmentList.innerHTML = `<div class="emptyState">Erstelle zuerst ein Team.</div>`;
+    return;
+  }
+
+  adminTeamsCache.forEach(team => {
+    const label = document.createElement("label");
+    label.className = "teamCheckbox";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = team.id;
+    checkbox.checked = selectedUser.teamIds.includes(team.id);
+
+    const text = document.createElement("span");
+    text.textContent = team.name;
+
+    label.append(checkbox, text);
+    teamAssignmentList.appendChild(label);
+  });
+}
+
+function renderAdminUserList() {
+  adminUserList.innerHTML = "";
+
+  if (adminUsersCache.length === 0) {
+    adminUserList.innerHTML = `<div class="emptyState">Noch keine registrierten User. Sobald sich User anmelden oder Trainings gespeichert haben, erscheinen sie hier.</div>`;
+    return;
+  }
+
+  adminUsersCache.forEach(user => {
+    const item = document.createElement("article");
+    item.className = "adminUserItem";
+
+    const email = document.createElement("strong");
+    email.textContent = user.email;
+
+    const teams = document.createElement("p");
+    teams.textContent = getTeamNames(user.teamIds);
+
+    item.append(email, teams);
+    adminUserList.appendChild(item);
+  });
+}
+
+function getTeamNames(teamIds) {
+  if (!teamIds.length) {
+    return "Keinem Team zugeordnet";
+  }
+
+  return teamIds
+    .map(teamId => adminTeamsCache.find(team => team.id === teamId)?.name || "Unbekanntes Team")
+    .join(", ");
+}
 
 function populateExerciseSelects() {
   populateExerciseSelect(exerciseInput, { includeAllOption: false });
@@ -332,6 +710,7 @@ saveWorkoutBtn.addEventListener("click", async () => {
       exercise: exerciseInput.value,
       value: Number(valueInput.value),
       unit: unitInput.value,
+      teamIds: currentUserTeamIds,
       createdAt: serverTimestamp()
     });
 
@@ -343,7 +722,7 @@ function loadWorkoutFeed() {
   const q = query(
     collection(db, "workouts"),
     orderBy("createdAt", "desc"),
-    limit(TEAM_WORKOUT_FEED_LIMIT)
+    limit(TEAM_WORKOUT_QUERY_LIMIT)
   );
 
   unsubscribeWorkoutFeed = onSnapshot(q, snapshot => {
@@ -368,8 +747,11 @@ function loadWorkoutFeed() {
     });
 
     workoutFeedInitialized = true;
-    renderWorkoutTicker(workouts);
-    newWorkoutNotifications.forEach(showWorkoutPushNotification);
+    const visibleWorkouts = getVisibleTeamWorkouts(workouts).slice(0, TEAM_WORKOUT_FEED_LIMIT);
+    renderWorkoutTicker(visibleWorkouts);
+    newWorkoutNotifications
+      .filter(workout => canSeeWorkoutInTeams(workout))
+      .forEach(showWorkoutPushNotification);
   }, error => {
     showFirebaseError("Info-Balken laden", error);
   });
@@ -417,6 +799,7 @@ function createWorkoutFromDoc(id, data) {
     exercise: data.exercise,
     value: Number(data.value) || 0,
     unit: data.unit,
+    teamIds: Array.isArray(data.teamIds) ? data.teamIds : [],
     createdAt: getWorkoutDate(data.createdAt)
   };
 }
@@ -512,6 +895,35 @@ function loadComparisonWorkouts() {
   });
 }
 
+function getVisibleTeamWorkouts(workouts) {
+  return workouts.filter(workout => canSeeWorkoutInTeams(workout));
+}
+
+function canSeeWorkoutInTeams(workout) {
+  if (!currentUser) {
+    return false;
+  }
+
+  if (workout.userId === currentUser.uid) {
+    return true;
+  }
+
+  if (currentUserTeamIds.length === 0) {
+    return false;
+  }
+
+  const workoutTeamIds = getWorkoutTeamIds(workout);
+  return workoutTeamIds.some(teamId => currentUserTeamIds.includes(teamId));
+}
+
+function getWorkoutTeamIds(workout) {
+  if (workout.teamIds?.length) {
+    return workout.teamIds;
+  }
+
+  return usersCache.get(workout.userId)?.teamIds || [];
+}
+
 function renderComparison() {
   comparisonList.innerHTML = "";
 
@@ -525,14 +937,14 @@ function renderComparison() {
   const exercise = comparisonExercise.value;
   const filteredWorkouts = comparisonWorkoutsCache.filter(workout => {
     const exerciseMatches = exercise === "all" || workout.exercise === exercise;
-    return exerciseMatches && isWorkoutInRange(workout, range);
+    return exerciseMatches && isWorkoutInRange(workout, range) && canSeeWorkoutInTeams(workout);
   });
   const ranking = getUserRanking(filteredWorkouts);
   const currentUserIndex = ranking.findIndex(user => user.userId === currentUser.uid);
 
   if (ranking.length === 0) {
     comparisonSummary.textContent = `Keine Team-Daten für ${range.label}${getExerciseLabelSuffix(exercise)}.`;
-    comparisonList.innerHTML = `<div class="emptyState">Sobald registrierte User Trainings speichern, erscheint hier die Rangliste.</div>`;
+    comparisonList.innerHTML = `<div class="emptyState">Sobald User aus deinen Teams Trainings speichern, erscheint hier die Rangliste.</div>`;
     return;
   }
 
