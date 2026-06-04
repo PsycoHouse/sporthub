@@ -62,6 +62,7 @@ let unsubscribeWorkoutFeed = null;
 let unsubscribeComparisonWorkouts = null;
 let unsubscribeCurrentUserProfile = null;
 let unsubscribeTeamAccess = null;
+let unsubscribeTeams = null;
 let unsubscribeUsers = null;
 let unsubscribeAdminUsers = null;
 let unsubscribeAdminTeams = null;
@@ -70,11 +71,13 @@ let workoutsCache = [];
 let workoutHistoryCache = [];
 let comparisonWorkoutsCache = [];
 let usersCache = new Map();
+let teamsCache = [];
 let adminUsersCache = [];
 let adminProfileUsersCache = [];
 let adminWorkoutUsersCache = [];
 let adminTeamsCache = [];
 let currentUserTeamIds = [];
+let selectedComparisonTeamId = "all";
 let teamAccessTargetUserIds = new Set();
 let hasLoadedTeamAccess = false;
 let workoutFeedInitialized = false;
@@ -144,6 +147,7 @@ const statsTo = document.getElementById("statsTo");
 const radarChart = document.getElementById("radarChart");
 const radarSummary = document.getElementById("radarSummary");
 const radarLegend = document.getElementById("radarLegend");
+const comparisonTeam = document.getElementById("comparisonTeam");
 const comparisonRange = document.getElementById("comparisonRange");
 const comparisonExercise = document.getElementById("comparisonExercise");
 const comparisonSummary = document.getElementById("comparisonSummary");
@@ -294,6 +298,11 @@ onAuthStateChanged(auth, async user => {
     unsubscribeTeamAccess = null;
   }
 
+  if (unsubscribeTeams) {
+    unsubscribeTeams();
+    unsubscribeTeams = null;
+  }
+
   if (unsubscribeUsers) {
     unsubscribeUsers();
     unsubscribeUsers = null;
@@ -302,7 +311,9 @@ onAuthStateChanged(auth, async user => {
   workoutFeedInitialized = false;
   seenWorkoutFeedIds.clear();
   usersCache = new Map();
+  teamsCache = [];
   currentUserTeamIds = [];
+  selectedComparisonTeamId = "all";
   teamAccessTargetUserIds = new Set();
   hasLoadedTeamAccess = false;
 
@@ -323,6 +334,8 @@ onAuthStateChanged(auth, async user => {
     setStatus("Firebase Auth verbunden. Lade Firestore-Daten ...");
     await ensureUserProfile(user);
     loadCurrentUserProfile(user.uid);
+    loadTeamsForComparison();
+    loadUsersForTeamVisibility();
     loadTeamAccess(user.uid);
     loadWorkouts();
   } else {
@@ -333,6 +346,8 @@ onAuthStateChanged(auth, async user => {
     workoutsCache = [];
     workoutHistoryCache = [];
     comparisonWorkoutsCache = [];
+    teamsCache = [];
+    selectedComparisonTeamId = "all";
     teamAccessTargetUserIds = new Set();
     hasLoadedTeamAccess = false;
     stats.textContent = "";
@@ -350,6 +365,10 @@ statsRange.addEventListener("change", () => {
 
 statsFrom.addEventListener("change", renderStats);
 statsTo.addEventListener("change", renderStats);
+comparisonTeam.addEventListener("change", () => {
+  selectedComparisonTeamId = comparisonTeam.value || "all";
+  renderComparison();
+});
 comparisonRange.addEventListener("change", renderComparison);
 comparisonExercise.addEventListener("change", renderComparison);
 exerciseInput.addEventListener("change", () => {
@@ -466,6 +485,10 @@ function cleanupRegularSubscriptions() {
   if (unsubscribeTeamAccess) {
     unsubscribeTeamAccess();
     unsubscribeTeamAccess = null;
+  }
+  if (unsubscribeTeams) {
+    unsubscribeTeams();
+    unsubscribeTeams = null;
   }
   hasLoadedTeamAccess = false;
   if (unsubscribeUsers) {
@@ -665,6 +688,57 @@ function loadUsersForTeamVisibility() {
 }
 
 
+function loadTeamsForComparison() {
+  if (unsubscribeTeams) {
+    unsubscribeTeams();
+    unsubscribeTeams = null;
+  }
+
+  unsubscribeTeams = onSnapshot(collection(db, "teams"), snapshot => {
+    teamsCache = [];
+
+    snapshot.forEach(teamDoc => {
+      const data = teamDoc.data();
+      teamsCache.push({
+        id: teamDoc.id,
+        name: data.name || "Unbenanntes Team"
+      });
+    });
+
+    teamsCache.sort((a, b) => a.name.localeCompare(b.name, "de"));
+    renderComparisonTeamSelect();
+    renderComparison();
+  }, error => {
+    teamsCache = [];
+    renderComparisonTeamSelect();
+    showFirebaseError("Teams für Vergleich laden", error);
+  });
+}
+
+function renderComparisonTeamSelect() {
+  const availableTeams = getCurrentUserComparisonTeams();
+  const currentValue = selectedComparisonTeamId;
+
+  comparisonTeam.replaceChildren();
+  comparisonTeam.appendChild(createSelectOption("all", "Alle Teams"));
+
+  availableTeams.forEach(team => {
+    comparisonTeam.appendChild(createSelectOption(team.id, team.name));
+  });
+
+  selectedComparisonTeamId = availableTeams.some(team => team.id === currentValue)
+    ? currentValue
+    : "all";
+  comparisonTeam.value = selectedComparisonTeamId;
+  comparisonTeam.disabled = availableTeams.length === 0;
+}
+
+function getCurrentUserComparisonTeams() {
+  return currentUserTeamIds
+    .map(teamId => teamsCache.find(team => team.id === teamId) || { id: teamId, name: "Unbekanntes Team" })
+    .sort((a, b) => a.name.localeCompare(b.name, "de"));
+}
+
 function loadTeamAccess(userId) {
   hasLoadedTeamAccess = false;
 
@@ -719,6 +793,7 @@ function loadCurrentUserProfile(userId) {
     const nextTeamIds = Array.isArray(data.teamIds) ? data.teamIds : [];
     const teamsChanged = !arraysHaveSameValues(currentUserTeamIds, nextTeamIds);
     currentUserTeamIds = nextTeamIds;
+    renderComparisonTeamSelect();
     userInfo.textContent = `Eingeloggt als ${currentUser.email}${getTeamInfoSuffix(currentUserTeamIds)}`;
 
     if (teamsChanged || !unsubscribeWorkoutFeed || !unsubscribeComparisonWorkouts) {
@@ -1381,6 +1456,14 @@ function canSeeWorkoutInTeams(workout) {
   return teamAccessTargetUserIds.has(workout.userId);
 }
 
+function isWorkoutInSelectedComparisonTeam(workout) {
+  if (selectedComparisonTeamId === "all") {
+    return true;
+  }
+
+  return getWorkoutTeamIds(workout).includes(selectedComparisonTeamId);
+}
+
 function getWorkoutTeamIds(workout) {
   if (workout.teamIds?.length) {
     return workout.teamIds;
@@ -1402,13 +1485,16 @@ function renderComparison() {
   const exercise = comparisonExercise.value;
   const filteredWorkouts = comparisonWorkoutsCache.filter(workout => {
     const exerciseMatches = exercise === "all" || workout.exercise === exercise;
-    return exerciseMatches && isWorkoutInRange(workout, range) && canSeeWorkoutInTeams(workout);
+    return exerciseMatches
+      && isWorkoutInRange(workout, range)
+      && canSeeWorkoutInTeams(workout)
+      && isWorkoutInSelectedComparisonTeam(workout);
   });
   const ranking = getUserRanking(filteredWorkouts);
   const currentUserIndex = ranking.findIndex(user => user.userId === currentUser.uid);
 
   if (ranking.length === 0) {
-    comparisonSummary.textContent = `Keine Team-Daten für ${range.label}${getExerciseLabelSuffix(exercise)}.`;
+    comparisonSummary.textContent = `Keine Team-Daten für ${range.label}${getExerciseLabelSuffix(exercise)}${getComparisonTeamLabelSuffix()}.`;
     comparisonList.innerHTML = `<div class="emptyState">Sobald User aus deinen Teams Trainings speichern, erscheint hier die Rangliste.</div>`;
     return;
   }
@@ -1416,8 +1502,8 @@ function renderComparison() {
   const leader = ranking[0];
   const currentUserStats = currentUserIndex >= 0 ? ranking[currentUserIndex] : null;
   comparisonSummary.textContent = currentUserStats
-    ? `Du bist auf Platz ${currentUserIndex + 1} von ${ranking.length} für ${range.label}${getExerciseLabelSuffix(exercise)}. Abstand zur Spitze: ${formatNumber(Math.max(leader.total - currentUserStats.total, 0))}.`
-    : `Für dich gibt es in ${range.label}${getExerciseLabelSuffix(exercise)} noch keinen Eintrag. ${getDisplayUserName(leader.userEmail)} führt mit ${formatNumber(leader.total)}.`;
+    ? `Du bist auf Platz ${currentUserIndex + 1} von ${ranking.length} für ${range.label}${getExerciseLabelSuffix(exercise)}${getComparisonTeamLabelSuffix()}. Abstand zur Spitze: ${formatNumber(Math.max(leader.total - currentUserStats.total, 0))}.`
+    : `Für dich gibt es in ${range.label}${getExerciseLabelSuffix(exercise)}${getComparisonTeamLabelSuffix()} noch keinen Eintrag. ${getDisplayUserName(leader.userEmail)} führt mit ${formatNumber(leader.total)}.`;
 
   const maxTotal = Math.max(leader.total, 1);
   ranking.forEach((user, index) => {
@@ -1501,6 +1587,15 @@ function createComparisonItem(user, index, maxTotal) {
 function getTopExerciseSummary(exerciseTotals) {
   const [exercise, value] = Object.entries(exerciseTotals).sort((a, b) => b[1] - a[1])[0] || [];
   return exercise ? `Top: ${getExerciseIcon(exercise)} ${exercise} (${formatNumber(value)})` : "Noch kein Übungsfokus";
+}
+
+function getComparisonTeamLabelSuffix() {
+  if (selectedComparisonTeamId === "all") {
+    return " · Alle Teams";
+  }
+
+  const selectedTeam = teamsCache.find(team => team.id === selectedComparisonTeamId);
+  return ` · ${selectedTeam?.name || "Unbekanntes Team"}`;
 }
 
 function getExerciseLabelSuffix(exercise) {
