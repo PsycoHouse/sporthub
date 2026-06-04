@@ -244,17 +244,32 @@ async function getMessagingServiceWorkerRegistration() {
     throw new Error("Service Worker werden in diesem Browser nicht unterstützt.");
   }
 
-  if (messagingServiceWorkerRegistration) {
+  if (messagingServiceWorkerRegistration?.active) {
     return messagingServiceWorkerRegistration;
   }
 
   const serviceWorkerUrl = new URL("firebase-messaging-sw.js", import.meta.url);
-  messagingServiceWorkerRegistration = await navigator.serviceWorker.register(
-    serviceWorkerUrl,
-    { scope: "./" }
-  );
+  const serviceWorkerScope = new URL("./", import.meta.url);
+  const registration = await navigator.serviceWorker.register(serviceWorkerUrl, {
+    scope: serviceWorkerScope
+  });
 
+  messagingServiceWorkerRegistration = await waitForActiveServiceWorker(registration);
   return messagingServiceWorkerRegistration;
+}
+
+async function waitForActiveServiceWorker(registration) {
+  if (registration.active) {
+    return registration;
+  }
+
+  const readyRegistration = await navigator.serviceWorker.ready;
+
+  if (readyRegistration.active) {
+    return readyRegistration;
+  }
+
+  throw new Error("Der Push-Service-Worker konnte nicht aktiviert werden. Bitte Seite neu laden und erneut versuchen.");
 }
 
 async function runFirebaseAction(label, action) {
