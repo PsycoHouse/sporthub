@@ -36,3 +36,9 @@ Zusätzlich zur bestehenden Collection `workouts` nutzt die App jetzt:
 
 - `users`: E-Mail-Adresse und Team-Zuordnungen der angemeldeten Nutzer
 - `teams`: Teamnamen, die in der Admin-Umgebung verwaltet werden
+
+## Firestore-Regeln
+
+Die zur App passende Regeldatei liegt in `firestore.rules`. Wichtig: Die App prüft Admin-Rechte nicht mehr über ein fest codiertes Passwort oder eine E-Mail-Adresse, sondern über ein Dokument `admins/{uid}` in Firestore. Lege dieses Admin-Dokument einmalig über die Firebase Console, die Admin SDKs oder ein bereits berechtigtes Admin-Konto an.
+
+Normale Nutzer lesen und schreiben weiterhin nur ihre eigenen Profile und Trainings. Team-Feed und Team-Vergleich laden ausschließlich Workouts, deren `teamIds` sich mit den im eigenen `users/{uid}.teamIds` gespeicherten Teams überschneiden; die Admin-Ansicht darf alle Nutzer, Teams und Workouts lesen.
