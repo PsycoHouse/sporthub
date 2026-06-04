@@ -92,6 +92,11 @@ select:focus {
   background: rgba(15, 23, 42, 0.95);
 }
 
+select option {
+  color: #0f172a;
+  background: #f8fafc;
+}
+
 label {
   display: block;
   margin: 14px 0 7px;
