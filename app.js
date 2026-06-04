@@ -74,7 +74,7 @@ const seenWorkoutFeedIds = new Set();
 const PERSONAL_WORKOUT_HISTORY_LIMIT = 5;
 const TEAM_WORKOUT_FEED_LIMIT = 3;
 const TEAM_WORKOUT_QUERY_LIMIT = 100;
-const ADMIN_EMAIL = "admin";
+const ADMIN_USERNAME = "admin";
 const ADMIN_PASSWORD = "102938";
 const FAVORITE_EXERCISES_STORAGE_KEY = "sporthubFavoriteExercises";
 
@@ -163,7 +163,14 @@ registerBtn.addEventListener("click", async () => {
 });
 
 loginBtn.addEventListener("click", async () => {
-  if (isAdminCredentials(emailInput.value, passwordInput.value)) {
+  const loginIdentifier = emailInput.value;
+
+  if (isAdminUsername(loginIdentifier)) {
+    if (!isAdminCredentials(loginIdentifier, passwordInput.value)) {
+      setStatus("Admin-Login fehlgeschlagen: Passwort ist falsch.", true);
+      return;
+    }
+
     await enterAdminMode();
     return;
   }
@@ -306,8 +313,12 @@ exerciseInput.addEventListener("change", () => {
 });
 favoriteExerciseBtn.addEventListener("click", toggleFavoriteExercise);
 
+function isAdminUsername(email) {
+  return email.trim().toLowerCase() === ADMIN_USERNAME;
+}
+
 function isAdminCredentials(email, password) {
-  return email.trim().toLowerCase() === ADMIN_EMAIL && password === ADMIN_PASSWORD;
+  return isAdminUsername(email) && password === ADMIN_PASSWORD;
 }
 
 async function enterAdminMode() {
