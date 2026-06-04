@@ -15,6 +15,7 @@ import {
   query,
   where,
   orderBy,
+  limit,
   onSnapshot,
   serverTimestamp,
   enableNetwork,
@@ -24,6 +25,7 @@ import {
 import {
   getMessaging,
   getToken,
+  onMessage,
   isSupported as isMessagingSupported
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 
@@ -44,14 +46,20 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 let messagingServiceWorkerRegistration = null;
+let unsubscribeForegroundMessages = null;
 
 let currentUser = null;
 let unsubscribeWorkouts = null;
+let unsubscribeWorkoutFeed = null;
 let workoutsCache = [];
+let workoutFeedInitialized = false;
+const seenWorkoutFeedIds = new Set();
 
 const loginBox = document.getElementById("loginBox");
 const appBox = document.getElementById("appBox");
 const userInfo = document.getElementById("userInfo");
+const workoutTicker = document.getElementById("workoutTicker");
+const workoutTickerList = document.getElementById("workoutTickerList");
 const statusMessage = document.getElementById("statusMessage");
 const emailInput = document.getElementById("email");
 const passwordInput = document.getElementById("password");
@@ -109,11 +117,20 @@ onAuthStateChanged(auth, user => {
     unsubscribeWorkouts = null;
   }
 
+  if (unsubscribeWorkoutFeed) {
+    unsubscribeWorkoutFeed();
+    unsubscribeWorkoutFeed = null;
+  }
+
+  workoutFeedInitialized = false;
+  seenWorkoutFeedIds.clear();
+
   if (user) {
     loginBox.hidden = true;
     appBox.hidden = false;
     userInfo.textContent = `Eingeloggt als ${user.email}`;
     setStatus("Firebase Auth verbunden. Lade Firestore-Daten ...");
+    loadWorkoutFeed();
     loadWorkouts();
   } else {
     loginBox.hidden = false;
@@ -121,6 +138,7 @@ onAuthStateChanged(auth, user => {
     workoutList.innerHTML = "";
     workoutsCache = [];
     stats.textContent = "";
+    renderWorkoutTicker([]);
     renderStats();
     setStatus("Nicht eingeloggt. Firebase ist initialisiert.");
   }
@@ -148,6 +166,7 @@ saveWorkoutBtn.addEventListener("click", async () => {
   await runFirebaseAction("Training speichern", async () => {
     await addDoc(collection(db, "workouts"), {
       userId: currentUser.uid,
+      userEmail: currentUser.email || "Unbekannter User",
       exercise: exerciseInput.value,
       value: Number(valueInput.value),
       unit: unitInput.value,
@@ -157,6 +176,129 @@ saveWorkoutBtn.addEventListener("click", async () => {
     valueInput.value = "";
   });
 });
+
+function loadWorkoutFeed() {
+  const q = query(
+    collection(db, "workouts"),
+    orderBy("createdAt", "desc"),
+    limit(5)
+  );
+
+  unsubscribeWorkoutFeed = onSnapshot(q, snapshot => {
+    const workouts = [];
+    const newWorkoutNotifications = [];
+
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      workouts.push(createWorkoutFromDoc(doc.id, data));
+    });
+
+    snapshot.docChanges().forEach(change => {
+      if (change.type !== "added" || seenWorkoutFeedIds.has(change.doc.id)) {
+        return;
+      }
+
+      seenWorkoutFeedIds.add(change.doc.id);
+
+      if (workoutFeedInitialized) {
+        newWorkoutNotifications.push(createWorkoutFromDoc(change.doc.id, change.doc.data()));
+      }
+    });
+
+    workoutFeedInitialized = true;
+    renderWorkoutTicker(workouts);
+    newWorkoutNotifications.forEach(showWorkoutPushNotification);
+  }, error => {
+    showFirebaseError("Info-Balken laden", error);
+  });
+}
+
+function renderWorkoutTicker(workouts) {
+  workoutTicker.hidden = false;
+  workoutTickerList.innerHTML = "";
+
+  if (workouts.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "tickerEmpty";
+    empty.textContent = currentUser
+      ? "Noch keine Trainings im Team. Starte die erste Einheit!"
+      : "Logge dich ein, um aktuelle Trainingsmeldungen zu sehen.";
+    workoutTickerList.appendChild(empty);
+    return;
+  }
+
+  workouts.forEach(workout => {
+    const item = document.createElement("li");
+    item.className = "tickerItem";
+
+    const icon = document.createElement("span");
+    icon.className = "tickerIcon";
+    icon.textContent = getExerciseIcon(workout.exercise);
+
+    const message = document.createElement("span");
+    message.textContent = getWorkoutNotificationBody(workout);
+
+    item.append(icon, message);
+    workoutTickerList.appendChild(item);
+  });
+}
+
+function createWorkoutFromDoc(id, data) {
+  return {
+    id,
+    userId: data.userId,
+    userEmail: data.userEmail || "Ein User",
+    exercise: data.exercise,
+    value: Number(data.value) || 0,
+    unit: data.unit,
+    createdAt: getWorkoutDate(data.createdAt)
+  };
+}
+
+async function showWorkoutPushNotification(workout) {
+  if (!canShowWorkoutNotification()) {
+    return;
+  }
+
+  const title = "Neue Trainingseinheit";
+  const body = getWorkoutNotificationBody(workout);
+  const options = {
+    body,
+    icon: "icons/icon-192.png",
+    badge: "icons/icon-192.png",
+    tag: `workout-${workout.id}`,
+    renotify: true
+  };
+
+  try {
+    if ("serviceWorker" in navigator) {
+      const registration = await getMessagingServiceWorkerRegistration();
+      await registration.showNotification(title, options);
+      return;
+    }
+
+    new Notification(title, options);
+  } catch (error) {
+    console.warn("Workout-Push konnte nicht angezeigt werden:", error);
+  }
+}
+
+function canShowWorkoutNotification() {
+  return "Notification" in window && Notification.permission === "granted";
+}
+
+function getWorkoutNotificationBody(workout) {
+  const userName = getDisplayUserName(workout.userEmail);
+  return `${userName} hat ${formatNumber(workout.value)} ${workout.unit} ${workout.exercise} gemacht.`;
+}
+
+function getDisplayUserName(email) {
+  if (!email) {
+    return "Ein User";
+  }
+
+  return email.includes("@") ? email.split("@")[0] : email;
+}
 
 function loadWorkouts() {
   const q = query(
@@ -171,13 +313,7 @@ function loadWorkouts() {
 
     snapshot.forEach(doc => {
       const data = doc.data();
-      workoutsCache.push({
-        id: doc.id,
-        exercise: data.exercise,
-        value: Number(data.value) || 0,
-        unit: data.unit,
-        createdAt: getWorkoutDate(data.createdAt)
-      });
+      workoutsCache.push(createWorkoutFromDoc(doc.id, data));
     });
 
     renderWorkoutList(workoutsCache);
@@ -485,6 +621,7 @@ enablePushBtn.addEventListener("click", async () => {
 
     const serviceWorkerRegistration = await getMessagingServiceWorkerRegistration();
     const messaging = getMessaging(app);
+    listenForForegroundPushMessages(messaging);
     const token = await getToken(messaging, {
       vapidKey: publicVapidKey,
       serviceWorkerRegistration
@@ -504,6 +641,28 @@ enablePushBtn.addEventListener("click", async () => {
   });
 });
 
+
+function listenForForegroundPushMessages(messaging) {
+  if (unsubscribeForegroundMessages) {
+    return;
+  }
+
+  unsubscribeForegroundMessages = onMessage(messaging, payload => {
+    const notification = payload.notification || {};
+    const title = notification.title || "SportChallenge";
+    const body = notification.body || "Neue Trainingseinheit";
+
+    setStatus(`${title}: ${body}`);
+
+    if (canShowWorkoutNotification()) {
+      new Notification(title, {
+        body,
+        icon: "icons/icon-192.png",
+        badge: "icons/icon-192.png"
+      });
+    }
+  });
+}
 
 async function getMessagingServiceWorkerRegistration() {
   if (!("serviceWorker" in navigator)) {

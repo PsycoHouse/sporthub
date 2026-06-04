@@ -13,6 +13,14 @@
 <body>
   <main class="appShell">
     <section class="contentPanel" aria-label="SportChallenge App">
+      <aside id="workoutTicker" class="workoutTicker" aria-labelledby="workoutTickerTitle">
+        <div class="tickerHeader">
+          <span class="tickerLiveDot" aria-hidden="true"></span>
+          <h1 id="workoutTickerTitle">Live Trainings</h1>
+        </div>
+        <ul id="workoutTickerList" class="tickerList"></ul>
+      </aside>
+
       <p id="statusMessage" class="status" role="status">Firebase wird initialisiert ...</p>
 
       <section id="loginBox" class="card authCard" aria-labelledby="loginTitle">
