@@ -52,6 +52,7 @@ let unsubscribeForegroundMessages = null;
 
 let currentUser = null;
 let isAdminMode = false;
+let preferAdminLogin = false;
 let unsubscribeWorkouts = null;
 let unsubscribeWorkoutFeed = null;
 let unsubscribeComparisonWorkouts = null;
@@ -120,6 +121,7 @@ const emailInput = document.getElementById("email");
 const passwordInput = document.getElementById("password");
 const registerBtn = document.getElementById("registerBtn");
 const loginBtn = document.getElementById("loginBtn");
+const adminLoginShortcut = document.getElementById("adminLoginShortcut");
 const logoutBtn = document.getElementById("logoutBtn");
 const exerciseInput = document.getElementById("exercise");
 const favoriteExerciseBtn = document.getElementById("favoriteExerciseBtn");
@@ -163,6 +165,20 @@ registerBtn.addEventListener("click", async () => {
   });
 });
 
+adminLoginShortcut.addEventListener("click", () => {
+  preferAdminLogin = !preferAdminLogin;
+  loginBox.classList.toggle("adminLoginActive", preferAdminLogin);
+  adminLoginShortcut.setAttribute("aria-pressed", String(preferAdminLogin));
+
+  if (preferAdminLogin) {
+    setStatus("Admin-Login aktiviert. Bitte mit dem berechtigten Konto einloggen.");
+    emailInput.focus();
+    return;
+  }
+
+  setStatus("Standard-Login aktiviert.");
+});
+
 loginBtn.addEventListener("click", async () => {
   const loginIdentifier = emailInput.value;
 
@@ -177,11 +193,25 @@ loginBtn.addEventListener("click", async () => {
   }
 
   await runFirebaseAction("Login", async () => {
-    await signInWithEmailAndPassword(
+    const credential = await signInWithEmailAndPassword(
       auth,
       emailInput.value,
       passwordInput.value
     );
+
+    if (!preferAdminLogin) {
+      return;
+    }
+
+    if (!isAdminEmail(credential.user.email)) {
+      resetAdminLoginShortcut();
+      await signOut(auth);
+      setStatus("Admin-Login ist nur für berechtigte Konten möglich.", true);
+      return false;
+    }
+
+    await enterAdminMode({ signOutCurrentUser: false });
+    return false;
   });
 });
 
@@ -327,6 +357,12 @@ function isAdminCredentials(email, password) {
   return isAdminUsername(email) && password === ADMIN_PASSWORD;
 }
 
+function resetAdminLoginShortcut() {
+  preferAdminLogin = false;
+  loginBox.classList.remove("adminLoginActive");
+  adminLoginShortcut.setAttribute("aria-pressed", "false");
+}
+
 function isAdminEmail(email) {
   return ADMIN_EMAILS.has((email || "").trim().toLowerCase());
 }
@@ -339,6 +375,7 @@ async function enterAdminMode({ signOutCurrentUser = true } = {}) {
     await signOut(auth);
   }
 
+  resetAdminLoginShortcut();
   loginBox.hidden = true;
   appBox.hidden = true;
   adminBox.hidden = false;
@@ -361,6 +398,7 @@ async function exitAdminMode() {
   }
 
   loginBox.hidden = false;
+  resetAdminLoginShortcut();
   setStatus("Admin-Umgebung geschlossen.");
 }
 
@@ -1454,7 +1492,12 @@ async function runFirebaseAction(label, action) {
   setStatus(`${label} läuft ...`);
 
   try {
-    await action();
+    const shouldShowSuccess = await action();
+
+    if (shouldShowSuccess === false) {
+      return;
+    }
+
     setStatus(`${label} erfolgreich.`);
   } catch (error) {
     showFirebaseError(label, error);
