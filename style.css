@@ -106,13 +106,6 @@ p {
   margin-top: 0;
 }
 
-h1 {
-  margin-bottom: 16px;
-  font-size: clamp(2.6rem, 9vw, 5.5rem);
-  line-height: 0.9;
-  letter-spacing: -0.08em;
-}
-
 h2 {
   margin-bottom: 0;
   font-size: clamp(1.45rem, 4vw, 2rem);
@@ -123,95 +116,18 @@ h2 {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(280px, 0.85fr) minmax(320px, 1.15fr);
-  gap: 28px;
-  width: min(1180px, calc(100% - 32px));
+  width: min(820px, calc(100% - 32px));
   min-height: 100vh;
   margin: 0 auto;
   padding: 32px 0;
   align-items: stretch;
 }
 
-.heroPanel,
 .contentPanel,
 .card {
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
   backdrop-filter: blur(20px);
-}
-
-.heroPanel {
-  position: sticky;
-  top: 32px;
-  display: flex;
-  min-height: calc(100vh - 64px);
-  padding: clamp(28px, 5vw, 54px);
-  overflow: hidden;
-  flex-direction: column;
-  justify-content: flex-end;
-  border-radius: 34px;
-  background:
-    linear-gradient(150deg, rgba(56, 189, 248, 0.24), transparent 42%),
-    linear-gradient(330deg, rgba(167, 139, 250, 0.24), transparent 52%),
-    var(--card);
-}
-
-.heroPanel::after {
-  position: absolute;
-  right: -80px;
-  top: 80px;
-  width: 260px;
-  height: 260px;
-  content: "";
-  border: 34px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-}
-
-.brandMark {
-  position: absolute;
-  top: 28px;
-  left: 28px;
-  display: grid;
-  width: 64px;
-  height: 64px;
-  place-items: center;
-  border-radius: 22px;
-  background: linear-gradient(135deg, var(--primary), var(--accent));
-  color: #020617;
-  font-weight: 950;
-  box-shadow: 0 18px 50px rgba(56, 189, 248, 0.24);
-}
-
-.heroText {
-  max-width: 520px;
-  margin-bottom: 28px;
-  color: #cbd5e1;
-  font-size: clamp(1.05rem, 2vw, 1.25rem);
-  line-height: 1.7;
-}
-
-.heroStats,
-.buttonRow,
-.dashboardTop,
-.dashboardGrid,
-.formGrid {
-  display: grid;
-  gap: 14px;
-}
-
-.heroStats {
-  grid-template-columns: repeat(3, 1fr);
-}
-
-.heroStats span {
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #e2e8f0;
-  font-size: 0.88rem;
-  font-weight: 800;
-  text-align: center;
 }
 
 .contentPanel {
@@ -235,6 +151,14 @@ h2 {
 .dashboard {
   display: grid;
   gap: 18px;
+}
+
+.buttonRow,
+.dashboardTop,
+.dashboardGrid,
+.formGrid {
+  display: grid;
+  gap: 14px;
 }
 
 .dashboardTop {
@@ -414,14 +338,9 @@ h2 {
     grid-template-columns: 1fr;
   }
 
-  .heroPanel,
   .statsCard {
     position: relative;
     top: auto;
-  }
-
-  .heroPanel {
-    min-height: 440px;
   }
 
   .dashboardGrid {
@@ -435,13 +354,11 @@ h2 {
     padding: 10px 0;
   }
 
-  .heroPanel,
   .contentPanel,
   .card {
     border-radius: 24px;
   }
 
-  .heroStats,
   .buttonRow,
   .formGrid,
   .dashboardTop {
