@@ -56,12 +56,10 @@
           <div class="formGrid">
             <div class="fieldGroup fullWidth">
               <label for="exercise">Übung</label>
-              <select id="exercise">
-                <option>Liegestütze</option>
-                <option>Kniebeugen</option>
-                <option>Plank</option>
-                <option>Joggen</option>
-              </select>
+              <div class="exercisePicker">
+                <select id="exercise"></select>
+                <button id="favoriteExerciseBtn" class="favoriteBtn" type="button" aria-pressed="false">☆ Favorisieren</button>
+              </div>
             </div>
 
             <div class="fieldGroup">
@@ -76,6 +74,9 @@
                 <option>Sekunden</option>
                 <option>Minuten</option>
                 <option>Kilometer</option>
+                <option>Kilogramm</option>
+                <option>Meter</option>
+                <option>Etagen</option>
               </select>
             </div>
           </div>
@@ -102,13 +103,7 @@
             </div>
             <div class="fieldGroup">
               <label for="comparisonExercise">Übung</label>
-              <select id="comparisonExercise">
-                <option value="all">Alle Übungen</option>
-                <option>Liegestütze</option>
-                <option>Kniebeugen</option>
-                <option>Plank</option>
-                <option>Joggen</option>
-              </select>
+              <select id="comparisonExercise"></select>
             </div>
           </div>
           <p id="comparisonSummary" class="comparisonSummary">Der Team-Vergleich wird geladen ...</p>
@@ -119,7 +114,7 @@
             <div class="sectionHeader inlineHeader">
               <div>
                 <p class="eyebrow">Timeline</p>
-                <h2 id="historyTitle">Verlauf</h2>
+                <h2 id="historyTitle">Persönlicher Verlauf</h2>
               </div>
             </div>
             <div id="workoutList" class="workoutList"></div>

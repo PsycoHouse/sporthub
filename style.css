@@ -181,6 +181,32 @@ h2 {
   grid-column: 1 / -1;
 }
 
+.exercisePicker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.favoriteBtn {
+  width: auto;
+  min-width: 150px;
+  color: #fef3c7;
+  border: 1px solid rgba(250, 204, 21, 0.28);
+  background: rgba(250, 204, 21, 0.1);
+  box-shadow: none;
+}
+
+.favoriteBtn:hover,
+.favoriteBtn.isFavorite {
+  border-color: rgba(250, 204, 21, 0.72);
+  background: rgba(250, 204, 21, 0.2);
+}
+
+.favoriteBtn.isFavorite {
+  color: #fde68a;
+}
+
 .sectionHeader {
   margin-bottom: 18px;
 }
@@ -633,7 +659,8 @@ h2 {
   .formGrid,
   .customRange,
   .comparisonControls,
-  .dashboardTop {
+  .dashboardTop,
+  .exercisePicker {
     grid-template-columns: 1fr;
   }
 
@@ -646,7 +673,8 @@ h2 {
     display: grid;
   }
 
-  .ghostBtn {
+  .ghostBtn,
+  .favoriteBtn {
     width: 100%;
   }
 }
