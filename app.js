@@ -80,7 +80,6 @@ let currentUserTeamIds = [];
 let selectedComparisonTeamId = "all";
 let teamAccessTargetUserIds = new Set();
 let hasLoadedTeamAccess = false;
-let workoutFeedInitialized = false;
 const seenWorkoutFeedIds = new Set();
 const PERSONAL_WORKOUT_HISTORY_LIMIT = 5;
 const TEAM_WORKOUT_FEED_LIMIT = 3;
@@ -308,7 +307,6 @@ onAuthStateChanged(auth, async user => {
     unsubscribeUsers = null;
   }
 
-  workoutFeedInitialized = false;
   seenWorkoutFeedIds.clear();
   usersCache = new Map();
   teamsCache = [];
@@ -874,7 +872,6 @@ function restartTeamWorkoutSubscriptions() {
     unsubscribeComparisonWorkouts = null;
   }
 
-  workoutFeedInitialized = false;
   seenWorkoutFeedIds.clear();
   comparisonWorkoutsCache = [];
 
@@ -1225,12 +1222,9 @@ function loadWorkoutFeed() {
       renderWorkoutTicker(visibleWorkouts);
     },
     onNewWorkout: workout => {
-      if (workoutFeedInitialized && canSeeWorkoutInTeams(workout)) {
+      if (canShowTeamWorkoutNotification(workout)) {
         showWorkoutPushNotification(workout);
       }
-    },
-    onInitialized: () => {
-      workoutFeedInitialized = true;
     },
     errorContext: "Info-Balken laden"
   });
@@ -1255,14 +1249,14 @@ function subscribeToWorkoutsByUserIds({
   perQueryLimit,
   onWorkoutsChange,
   onNewWorkout,
-  onInitialized,
   errorContext
 }) {
   const uniqueUserIds = Array.from(new Set(userIds)).filter(Boolean);
   const userIdChunks = chunkArray(uniqueUserIds, 30);
   const chunkWorkouts = new Map();
+  const notificationReadyChunks = new Set();
+  const notificationBaselineTime = new Date();
   const unsubscribers = [];
-  let initializedChunks = 0;
   let stopped = false;
 
   function publishWorkouts() {
@@ -1286,7 +1280,7 @@ function subscribeToWorkoutsByUserIds({
         return;
       }
 
-      const hadChunk = chunkWorkouts.has(chunkIndex);
+      const isReadyForNotifications = notificationReadyChunks.has(chunkIndex);
       const workouts = [];
       snapshot.forEach(workoutDoc => {
         workouts.push(createWorkoutFromDoc(workoutDoc.id, getSnapshotData(workoutDoc)));
@@ -1300,14 +1294,19 @@ function subscribeToWorkoutsByUserIds({
           }
 
           seenWorkoutFeedIds.add(change.doc.id);
-          onNewWorkout(createWorkoutFromDoc(change.doc.id, getSnapshotData(change.doc)));
+
+          const workout = createWorkoutFromDoc(change.doc.id, getSnapshotData(change.doc));
+
+          if (isReadyForNotifications || isWorkoutNewerThan(workout, notificationBaselineTime)) {
+            onNewWorkout(workout);
+          }
         });
       }
 
-      initializedChunks += hadChunk ? 0 : 1;
-      if (initializedChunks >= userIdChunks.length) {
-        onInitialized?.();
+      if (!snapshot.metadata.fromCache) {
+        notificationReadyChunks.add(chunkIndex);
       }
+
       publishWorkouts();
     }, error => {
       showFirebaseError(errorContext, error);
@@ -1320,6 +1319,10 @@ function subscribeToWorkoutsByUserIds({
     stopped = true;
     unsubscribers.forEach(unsubscribe => unsubscribe());
   };
+}
+
+function isWorkoutNewerThan(workout, baselineTime) {
+  return workout.createdAt instanceof Date && workout.createdAt > baselineTime;
 }
 
 function chunkArray(items, size) {
@@ -1409,6 +1412,10 @@ async function showWorkoutPushNotification(workout) {
 
 function canShowWorkoutNotification() {
   return "Notification" in window && Notification.permission === "granted";
+}
+
+function canShowTeamWorkoutNotification(workout) {
+  return currentUser && workout.userId !== currentUser.uid && canSeeWorkoutInTeams(workout);
 }
 
 function getWorkoutNotificationBody(workout) {
