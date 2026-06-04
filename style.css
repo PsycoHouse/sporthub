@@ -560,6 +560,26 @@ h2 {
   font-weight: 800;
 }
 
+.pushControl {
+  display: grid;
+  gap: 10px;
+}
+
+.pushHint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.pushHint.isError {
+  color: #fecdd3;
+}
+
+.pushHint.isSuccess {
+  color: #bbf7d0;
+}
 
 .comparisonCard {
   background:

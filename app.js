@@ -333,6 +333,7 @@ onAuthStateChanged(auth, async user => {
     userInfo.textContent = `Eingeloggt als ${user.email}`;
     setStatus("Firebase Auth verbunden. Lade Firestore-Daten ...");
     await ensureUserProfile(user);
+    updatePushButtonState();
     loadCurrentUserProfile(user.uid);
     loadTeamsForComparison();
     loadUsersForTeamVisibility();
@@ -354,6 +355,7 @@ onAuthStateChanged(auth, async user => {
     renderWorkoutTicker([]);
     renderStats();
     renderComparison();
+    updatePushButtonState();
     setStatus("Nicht eingeloggt. Firebase ist initialisiert.");
   }
 });
@@ -1925,7 +1927,16 @@ function formatNumber(value) {
 
 enablePushBtn.addEventListener("click", async () => {
   if (!currentUser) {
+    setPushHint("Bitte zuerst einloggen, dann Push aktivieren.", "error");
     setStatus("Bitte zuerst einloggen.", true);
+    return;
+  }
+
+  const supportState = await getPushSupportState();
+
+  if (!supportState.canRequestPermission) {
+    setPushHint(supportState.message, supportState.isError ? "error" : "default");
+    setStatus(supportState.message, supportState.isError);
     return;
   }
 
@@ -1934,17 +1945,18 @@ enablePushBtn.addEventListener("click", async () => {
       throw new Error("Firebase Messaging ist nicht konfiguriert.");
     }
 
-    const permission = await Notification.requestPermission();
-
-    if (permission !== "granted") {
-      throw new Error("Push wurde nicht erlaubt.");
-    }
-
     if (!publicVapidKey || publicVapidKey === "DEIN_PUBLIC_VAPID_KEY") {
       throw new Error("Bitte zuerst den öffentlichen Web-Push-VAPID-Key in app.js eintragen.");
     }
 
-    if (!await isMessagingSupported()) {
+    const permission = await Notification.requestPermission();
+
+    if (permission !== "granted") {
+      updatePushButtonState();
+      throw new Error("Push wurde nicht erlaubt.");
+    }
+
+    if (!await isFirebaseMessagingSupportedSafely()) {
       throw new Error("Push wird in diesem Browser nicht unterstützt.");
     }
 
@@ -1967,8 +1979,122 @@ enablePushBtn.addEventListener("click", async () => {
       token,
       createdAt: serverTimestamp()
     });
+
+    setPushHint("Push ist für dieses Gerät aktiviert.", "success");
+    updatePushButtonState();
   });
 });
+
+async function updatePushButtonState() {
+  const supportState = await getPushSupportState();
+  enablePushBtn.textContent = supportState.buttonLabel;
+  enablePushBtn.setAttribute("aria-label", supportState.buttonLabel);
+  setPushHint(supportState.message, supportState.isError ? "error" : supportState.isSuccess ? "success" : "default");
+}
+
+async function getPushSupportState() {
+  if (!currentUser) {
+    return {
+      canRequestPermission: false,
+      buttonLabel: "Push erlauben",
+      message: "Melde dich an, um Push-Benachrichtigungen für Trainings zu aktivieren.",
+      isError: false
+    };
+  }
+
+  if (!isSecureContext) {
+    return {
+      canRequestPermission: false,
+      buttonLabel: "Push nicht verfügbar",
+      message: "Push funktioniert nur über HTTPS oder lokal auf localhost.",
+      isError: true
+    };
+  }
+
+  if (isIosDevice() && !isRunningAsInstalledApp()) {
+    return {
+      canRequestPermission: false,
+      buttonLabel: "iPhone: App installieren",
+      message: "Auf dem iPhone zuerst in Safari teilen und „Zum Home-Bildschirm“ wählen. Danach die installierte SportChallenge-App öffnen und Push erneut aktivieren.",
+      isError: false
+    };
+  }
+
+  if (!("Notification" in window)) {
+    return {
+      canRequestPermission: false,
+      buttonLabel: "Push nicht verfügbar",
+      message: "Dieser Browser unterstützt keine Web-Benachrichtigungen.",
+      isError: true
+    };
+  }
+
+  if (Notification.permission === "granted") {
+    return {
+      canRequestPermission: true,
+      buttonLabel: "Push erneut aktivieren",
+      message: "Benachrichtigungen sind im Browser erlaubt. Tippe bei Bedarf erneut, um dieses Gerät neu zu registrieren.",
+      isSuccess: true
+    };
+  }
+
+  if (Notification.permission === "denied") {
+    return {
+      canRequestPermission: false,
+      buttonLabel: "Push blockiert",
+      message: "Push ist in den Browser-/iPhone-Einstellungen blockiert. Bitte dort für SportChallenge erlauben und die Seite neu öffnen.",
+      isError: true
+    };
+  }
+
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    return {
+      canRequestPermission: false,
+      buttonLabel: "Push nicht verfügbar",
+      message: "Dieser Browser unterstützt Web Push nicht. Auf dem iPhone nutze Safari und öffne die App vom Home-Bildschirm.",
+      isError: true
+    };
+  }
+
+  if (!await isFirebaseMessagingSupportedSafely()) {
+    return {
+      canRequestPermission: false,
+      buttonLabel: "Push nicht verfügbar",
+      message: "Firebase Web Push wird in diesem Browser nicht unterstützt. Auf dem iPhone nutze Safari und öffne die App vom Home-Bildschirm.",
+      isError: true
+    };
+  }
+
+  return {
+    canRequestPermission: true,
+    buttonLabel: "Push erlauben",
+    message: "Tippe auf „Push erlauben“, um Benachrichtigungen für neue Trainings zu aktivieren.",
+    isError: false
+  };
+}
+
+async function isFirebaseMessagingSupportedSafely() {
+  try {
+    return await isMessagingSupported();
+  } catch (error) {
+    console.warn("Firebase Web Push Support konnte nicht geprüft werden:", error);
+    return false;
+  }
+}
+
+function setPushHint(message, type = "default") {
+  pushHint.textContent = message;
+  pushHint.classList.toggle("isError", type === "error");
+  pushHint.classList.toggle("isSuccess", type === "success");
+}
+
+function isIosDevice() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+}
+
+function isRunningAsInstalledApp() {
+  return window.navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches;
+}
 
 
 function listenForForegroundPushMessages(messaging) {
