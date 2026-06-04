@@ -76,6 +76,7 @@ const TEAM_WORKOUT_FEED_LIMIT = 3;
 const TEAM_WORKOUT_QUERY_LIMIT = 100;
 const ADMIN_USERNAME = "admin";
 const ADMIN_PASSWORD = "102938";
+const ADMIN_EMAILS = new Set(["adrian.arab@hotmail.de"]);
 const FAVORITE_EXERCISES_STORAGE_KEY = "sporthubFavoriteExercises";
 
 const exerciseCatalog = [
@@ -271,6 +272,11 @@ onAuthStateChanged(auth, async user => {
   }
 
   if (user) {
+    if (isAdminEmail(user.email)) {
+      await enterAdminMode({ signOutCurrentUser: false });
+      return;
+    }
+
     loginBox.hidden = true;
     appBox.hidden = false;
     adminBox.hidden = true;
@@ -321,11 +327,15 @@ function isAdminCredentials(email, password) {
   return isAdminUsername(email) && password === ADMIN_PASSWORD;
 }
 
-async function enterAdminMode() {
+function isAdminEmail(email) {
+  return ADMIN_EMAILS.has((email || "").trim().toLowerCase());
+}
+
+async function enterAdminMode({ signOutCurrentUser = true } = {}) {
   isAdminMode = true;
   cleanupRegularSubscriptions();
 
-  if (auth.currentUser) {
+  if (signOutCurrentUser && auth.currentUser) {
     await signOut(auth);
   }
 
@@ -337,10 +347,19 @@ async function enterAdminMode() {
   loadAdminData();
 }
 
-function exitAdminMode() {
+async function exitAdminMode() {
   isAdminMode = false;
   cleanupAdminSubscriptions();
   adminBox.hidden = true;
+  appBox.hidden = true;
+
+  if (auth.currentUser) {
+    await runFirebaseAction("Admin-Logout", async () => {
+      await signOut(auth);
+    });
+    return;
+  }
+
   loginBox.hidden = false;
   setStatus("Admin-Umgebung geschlossen.");
 }
