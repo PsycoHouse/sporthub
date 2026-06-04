@@ -51,7 +51,9 @@ let unsubscribeForegroundMessages = null;
 let currentUser = null;
 let unsubscribeWorkouts = null;
 let unsubscribeWorkoutFeed = null;
+let unsubscribeComparisonWorkouts = null;
 let workoutsCache = [];
+let comparisonWorkoutsCache = [];
 let workoutFeedInitialized = false;
 const seenWorkoutFeedIds = new Set();
 
@@ -79,6 +81,10 @@ const statsTo = document.getElementById("statsTo");
 const radarChart = document.getElementById("radarChart");
 const radarSummary = document.getElementById("radarSummary");
 const radarLegend = document.getElementById("radarLegend");
+const comparisonRange = document.getElementById("comparisonRange");
+const comparisonExercise = document.getElementById("comparisonExercise");
+const comparisonSummary = document.getElementById("comparisonSummary");
+const comparisonList = document.getElementById("comparisonList");
 const enablePushBtn = document.getElementById("enablePushBtn");
 
 setStatus(`Firebase initialisiert: ${firebaseConfig.projectId}`);
@@ -122,6 +128,11 @@ onAuthStateChanged(auth, user => {
     unsubscribeWorkoutFeed = null;
   }
 
+  if (unsubscribeComparisonWorkouts) {
+    unsubscribeComparisonWorkouts();
+    unsubscribeComparisonWorkouts = null;
+  }
+
   workoutFeedInitialized = false;
   seenWorkoutFeedIds.clear();
 
@@ -132,14 +143,17 @@ onAuthStateChanged(auth, user => {
     setStatus("Firebase Auth verbunden. Lade Firestore-Daten ...");
     loadWorkoutFeed();
     loadWorkouts();
+    loadComparisonWorkouts();
   } else {
     loginBox.hidden = false;
     appBox.hidden = true;
     workoutList.innerHTML = "";
     workoutsCache = [];
+    comparisonWorkoutsCache = [];
     stats.textContent = "";
     renderWorkoutTicker([]);
     renderStats();
+    renderComparison();
     setStatus("Nicht eingeloggt. Firebase ist initialisiert.");
   }
 });
@@ -151,6 +165,8 @@ statsRange.addEventListener("change", () => {
 
 statsFrom.addEventListener("change", renderStats);
 statsTo.addEventListener("change", renderStats);
+comparisonRange.addEventListener("change", renderComparison);
+comparisonExercise.addEventListener("change", renderComparison);
 
 saveWorkoutBtn.addEventListener("click", async () => {
   if (!currentUser) {
@@ -324,6 +340,144 @@ function loadWorkouts() {
   });
 }
 
+function loadComparisonWorkouts() {
+  const q = query(
+    collection(db, "workouts"),
+    orderBy("createdAt", "desc"),
+    limit(250)
+  );
+
+  unsubscribeComparisonWorkouts = onSnapshot(q, snapshot => {
+    comparisonWorkoutsCache = [];
+
+    snapshot.forEach(doc => {
+      comparisonWorkoutsCache.push(createWorkoutFromDoc(doc.id, doc.data()));
+    });
+
+    renderComparison();
+  }, error => {
+    showFirebaseError("Team-Vergleich laden", error);
+  });
+}
+
+function renderComparison() {
+  comparisonList.innerHTML = "";
+
+  if (!currentUser) {
+    comparisonSummary.textContent = "Logge dich ein, um deinen Fortschritt mit anderen Usern zu vergleichen.";
+    comparisonList.innerHTML = `<div class="emptyState">Noch kein Team-Vergleich verfügbar.</div>`;
+    return;
+  }
+
+  const range = getSelectedComparisonRange();
+  const exercise = comparisonExercise.value;
+  const filteredWorkouts = comparisonWorkoutsCache.filter(workout => {
+    const exerciseMatches = exercise === "all" || workout.exercise === exercise;
+    return exerciseMatches && isWorkoutInRange(workout, range);
+  });
+  const ranking = getUserRanking(filteredWorkouts);
+  const currentUserIndex = ranking.findIndex(user => user.userId === currentUser.uid);
+
+  if (ranking.length === 0) {
+    comparisonSummary.textContent = `Keine Team-Daten für ${range.label}${getExerciseLabelSuffix(exercise)}.`;
+    comparisonList.innerHTML = `<div class="emptyState">Sobald registrierte User Trainings speichern, erscheint hier die Rangliste.</div>`;
+    return;
+  }
+
+  const leader = ranking[0];
+  const currentUserStats = currentUserIndex >= 0 ? ranking[currentUserIndex] : null;
+  comparisonSummary.textContent = currentUserStats
+    ? `Du bist auf Platz ${currentUserIndex + 1} von ${ranking.length} für ${range.label}${getExerciseLabelSuffix(exercise)}. Abstand zur Spitze: ${formatNumber(Math.max(leader.total - currentUserStats.total, 0))}.`
+    : `Für dich gibt es in ${range.label}${getExerciseLabelSuffix(exercise)} noch keinen Eintrag. ${getDisplayUserName(leader.userEmail)} führt mit ${formatNumber(leader.total)}.`;
+
+  const maxTotal = Math.max(leader.total, 1);
+  ranking.forEach((user, index) => {
+    comparisonList.appendChild(createComparisonItem(user, index, maxTotal));
+  });
+}
+
+function getUserRanking(workouts) {
+  const users = new Map();
+
+  workouts.forEach(workout => {
+    const key = workout.userId || workout.userEmail;
+
+    if (!users.has(key)) {
+      users.set(key, {
+        userId: workout.userId,
+        userEmail: workout.userEmail,
+        total: 0,
+        entries: 0,
+        exerciseTotals: {}
+      });
+    }
+
+    const user = users.get(key);
+    user.total += workout.value;
+    user.entries += 1;
+    user.exerciseTotals[workout.exercise] = (user.exerciseTotals[workout.exercise] || 0) + workout.value;
+  });
+
+  return Array.from(users.values()).sort((a, b) => {
+    if (b.total !== a.total) {
+      return b.total - a.total;
+    }
+
+    return b.entries - a.entries;
+  });
+}
+
+function createComparisonItem(user, index, maxTotal) {
+  const item = document.createElement("article");
+  item.className = "comparisonItem";
+  item.classList.toggle("isCurrentUser", user.userId === currentUser.uid);
+
+  const rank = document.createElement("span");
+  rank.className = "comparisonRank";
+  rank.textContent = `#${index + 1}`;
+
+  const content = document.createElement("div");
+  content.className = "comparisonContent";
+
+  const header = document.createElement("div");
+  header.className = "comparisonItemHeader";
+
+  const name = document.createElement("strong");
+  name.textContent = user.userId === currentUser.uid
+    ? `${getDisplayUserName(user.userEmail)} (du)`
+    : getDisplayUserName(user.userEmail);
+
+  const value = document.createElement("span");
+  value.textContent = `${formatNumber(user.total)} Punkte`;
+
+  header.append(name, value);
+
+  const progress = document.createElement("div");
+  progress.className = "comparisonProgress";
+  progress.setAttribute("aria-label", `${formatNumber(user.total)} von ${formatNumber(maxTotal)} Punkten`);
+
+  const bar = document.createElement("span");
+  bar.style.width = `${Math.max((user.total / maxTotal) * 100, 4)}%`;
+  progress.appendChild(bar);
+
+  const details = document.createElement("p");
+  details.className = "comparisonDetails";
+  details.textContent = `${user.entries} Einträge · ${getTopExerciseSummary(user.exerciseTotals)}`;
+
+  content.append(header, progress, details);
+  item.append(rank, content);
+  return item;
+}
+
+function getTopExerciseSummary(exerciseTotals) {
+  const [exercise, value] = Object.entries(exerciseTotals).sort((a, b) => b[1] - a[1])[0] || [];
+  return exercise ? `Top: ${getExerciseIcon(exercise)} ${exercise} (${formatNumber(value)})` : "Noch kein Übungsfokus";
+}
+
+function getExerciseLabelSuffix(exercise) {
+  return exercise === "all" ? "" : ` · ${exercise}`;
+}
+
 function renderWorkoutList(workouts) {
   workoutList.innerHTML = "";
 
@@ -366,9 +520,16 @@ function renderStats() {
 }
 
 function getSelectedStatsRange() {
+  return getStatsRange(statsRange.value, statsFrom.value, statsTo.value);
+}
+
+function getSelectedComparisonRange() {
+  return getStatsRange(comparisonRange.value);
+}
+
+function getStatsRange(value, fromValue = "", toValue = "") {
   const now = new Date();
   const today = startOfDay(now);
-  const value = statsRange.value;
 
   if (value === "week") {
     const start = startOfWeek(today);
@@ -388,8 +549,8 @@ function getSelectedStatsRange() {
   }
 
   if (value === "custom") {
-    const start = statsFrom.value ? startOfDay(new Date(statsFrom.value)) : null;
-    const end = statsTo.value ? endOfDay(new Date(statsTo.value)) : null;
+    const start = fromValue ? startOfDay(new Date(fromValue)) : null;
+    const end = toValue ? endOfDay(new Date(toValue)) : null;
     return { label: getCustomRangeLabel(start, end), start, end };
   }
 
