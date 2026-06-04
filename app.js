@@ -15,6 +15,7 @@ import {
   addDoc,
   doc,
   getDoc,
+  getDocs,
   setDoc,
   query,
   where,
@@ -393,6 +394,12 @@ async function enterAdminMode() {
 
   await ensureCurrentAdminProfile();
 
+  if (!await hasFirestoreAdminAccess()) {
+    await signOut(auth);
+    setStatus("Admin-Berechtigung ist im Frontend erkannt, aber Firestore lehnt Admin-Lesezugriffe ab. Bitte veröffentliche firestore.rules oder lege admins/{uid} bzw. einen Custom-Claim admin=true an.", true);
+    return;
+  }
+
   isAdminMode = true;
   cleanupRegularSubscriptions();
 
@@ -478,6 +485,19 @@ async function ensureCurrentAdminProfile() {
     await ensureUserProfile(auth.currentUser);
   } catch (error) {
     console.warn("Admin-Profil konnte nicht vorab gespeichert werden:", error);
+  }
+}
+
+async function hasFirestoreAdminAccess() {
+  try {
+    await Promise.all([
+      getDocs(query(collection(db, "users"), limit(1))),
+      getDocs(query(collection(db, "workouts"), limit(1)))
+    ]);
+    return true;
+  } catch (error) {
+    console.warn("Firestore-Adminzugriff konnte nicht bestätigt werden:", error);
+    return false;
   }
 }
 
