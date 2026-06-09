@@ -2028,7 +2028,7 @@ async function getPushSupportState() {
     return {
       canRequestPermission: false,
       buttonLabel: "iPhone: App installieren",
-      message: "Auf dem iPhone zuerst in Safari teilen und „Zum Home-Bildschirm“ wählen. Danach die installierte SportChallenge-App öffnen und Push erneut aktivieren.",
+      message: "Auf dem iPhone zuerst in Safari teilen und „Zum Home-Bildschirm“ wählen. Danach die installierte SportHub-App öffnen und Push erneut aktivieren.",
       isError: false
     };
   }
@@ -2055,7 +2055,7 @@ async function getPushSupportState() {
     return {
       canRequestPermission: false,
       buttonLabel: "Push blockiert",
-      message: "Push ist in den Browser-/iPhone-Einstellungen blockiert. Bitte dort für SportChallenge erlauben und die Seite neu öffnen.",
+      message: "Push ist in den Browser-/iPhone-Einstellungen blockiert. Bitte dort für SportHub erlauben und die Seite neu öffnen.",
       isError: true
     };
   }
@@ -2117,7 +2117,7 @@ function listenForForegroundPushMessages(messaging) {
 
   unsubscribeForegroundMessages = onMessage(messaging, payload => {
     const notification = payload.notification || {};
-    const title = notification.title || "SportChallenge";
+    const title = notification.title || "SportHub";
     const body = notification.body || "Neue Trainingseinheit";
 
     setStatus(`${title}: ${body}`);
