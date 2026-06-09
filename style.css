@@ -111,10 +111,14 @@ p {
   margin-top: 0;
 }
 
+h1,
 h2 {
   margin-bottom: 0;
-  font-size: clamp(1.45rem, 4vw, 2rem);
   letter-spacing: -0.04em;
+}
+
+h2 {
+  font-size: clamp(1.45rem, 4vw, 2rem);
 }
 
 .appShell {
@@ -147,6 +151,33 @@ h2 {
   padding: clamp(20px, 4vw, 28px);
   border-radius: 28px;
   background: var(--card);
+}
+
+.appHeader {
+  margin-bottom: 18px;
+  padding: clamp(20px, 4vw, 30px);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: 28px;
+  background:
+    linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(167, 139, 250, 0.16)),
+    rgba(15, 23, 42, 0.72);
+  box-shadow: 0 22px 60px rgba(2, 8, 23, 0.34);
+}
+
+.appKicker {
+  margin-bottom: 8px;
+  color: #bae6fd;
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.appName {
+  color: #f8fafc;
+  font-size: clamp(2.5rem, 10vw, 4.8rem);
+  line-height: 0.95;
+  text-shadow: 0 18px 44px rgba(56, 189, 248, 0.22);
 }
 
 .authCard,
@@ -280,7 +311,7 @@ h2 {
   align-items: center;
 }
 
-.tickerHeader h1 {
+.tickerHeader h2 {
   margin: 0;
   color: #ecfeff;
   font-size: clamp(1rem, 3vw, 1.25rem);
