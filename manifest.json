@@ -1,6 +1,6 @@
 {
-  "name": "SportChallenge",
-  "short_name": "SportChallenge",
+  "name": "SportHub",
+  "short_name": "SportHub",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#111111",

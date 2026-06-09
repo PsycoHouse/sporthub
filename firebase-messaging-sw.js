@@ -17,7 +17,7 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage(payload => {
   const notification = payload.notification || {};
 
-  self.registration.showNotification(notification.title || "SportChallenge", {
+  self.registration.showNotification(notification.title || "SportHub", {
     body: notification.body || "Neue Benachrichtigung",
     icon: new URL("icons/icon-192.png", self.registration.scope).href
   });
